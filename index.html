@@ -72,8 +72,8 @@
     border-color: #dcc99f;
   }
   .map-cell {
-    display: flex; flex-direction: column; align-self: start;
-    height: clamp(350px, calc(100vh - 358px), 760px);
+    display: flex; flex-direction: column;
+    min-height: clamp(350px, calc(100vh - 358px), 720px);
   }
   .map-viewport { position: relative; flex: 1; min-height: 280px; }
   @media (max-width: 860px) {
@@ -84,6 +84,9 @@
     h1 { font-size: 34px; }
     .man { width: 28px; height: 40px; }
     .wrap { padding-top: 16px; }
+    .tile { padding: 6px 10px; }
+    .tile .v { font-size: 18px; }
+    #wm { -webkit-line-clamp: 5; height: 117px; }
   }
   .map-viewport svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
   .map-viewport canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -116,7 +119,13 @@
   .rail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .rail .cell { width: 100%; }
   .rail .cell:last-child { flex: 1; }
-  #wm { font-size: 14.5px; line-height: 1.6; min-height: 212px; }
+  #wm {
+    font-size: 14px; line-height: 1.55; height: 131px;
+    display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .rail .cell:last-child { display: flex; flex-direction: column; }
+  .radio { margin-top: auto; }
+  .wm-sig { margin-bottom: 10px; }
   #nowlabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile .v { white-space: nowrap; }
   .wm-sig { margin-top: 10px; font-size: 12px; color: var(--muted); font-style: italic; }
@@ -168,9 +177,9 @@
 
   /* ---- tiles ---- */
   #now { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .tile { background: #fdfaf3; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+  .tile { background: #fdfaf3; border: 1px solid var(--line); border-radius: 12px; padding: 7px 11px; }
   .tile .k { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
-  .tile .v { font-family: var(--display); font-size: 21px; font-weight: 700; }
+  .tile .v { font-family: var(--display); font-size: 19px; font-weight: 700; }
   .tile .v small { font-family: Roboto, sans-serif; font-size: 12px; font-weight: 400; color: var(--muted); }
 
   /* ---- days ---- */

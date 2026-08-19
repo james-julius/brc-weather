@@ -162,3 +162,6 @@
 {"ts":"2026-08-19T18:49:16.977Z","cmd":"wait","args":"--networkidle","origin":"http://localhost:8642/","durationMs":1961,"status":"ok","hasCookies":false,"mode":"launched"}
 {"ts":"2026-08-19T18:49:19.524Z","cmd":"console","args":"--errors","origin":"http://localhost:8642/","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
 {"ts":"2026-08-19T18:49:19.563Z","cmd":"js","args":"const mets=[...document.querySelectorAll(\".day .met\")].map(e=>e.textContent).filter(t=>t.includes(\"Rain\")); \"unlikely: \" + mets.filter(t=>t.includes(\"unlikely\")).length + \" | numeric: \" + mets.filter(…","origin":"http://localhost:8642/","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:32:20.024Z","cmd":"goto","args":"https://brc-weather.pages.dev/","origin":"https://brc-weather.pages.dev/","durationMs":469,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:32:21.564Z","cmd":"wait","args":"--networkidle","origin":"https://brc-weather.pages.dev/","durationMs":1499,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:32:23.612Z","cmd":"network","args":"","origin":"https://brc-weather.pages.dev/","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}

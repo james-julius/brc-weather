@@ -189,6 +189,10 @@
     color: var(--muted); font-weight: 700; margin: 14px 0 8px;
   }
   .sub-label:first-child { margin-top: 0; }
+  .week-sum {
+    background: #f8f2e1; border: 1px solid var(--line); border-left: 4px solid var(--indigo);
+    border-radius: 10px; padding: 9px 13px; font-size: 13.5px; margin-bottom: 10px;
+  }
   .day.climo { border-style: dashed; background: #fbf7ec; }
   .b-climo { background: #d8cdb4; color: var(--ink); }
   .dn { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
@@ -1022,6 +1026,30 @@ function dayCard(i) {
     "</div></div>";
 }
 
+/* one-line plain-English verdict for a group of days */
+function weekSummary(items) {
+  items = items.filter(Boolean);
+  if (!items.length) return "";
+  const names = a => a.length >= 5 ? "most days" : a.map(i => i.dow).join(" & ");
+  const hiMin = Math.min(...items.map(i => i.hi)), hiMax = Math.max(...items.map(i => i.hi));
+  const loMin = Math.min(...items.map(i => i.lo));
+  const heat = hiMax >= 97 ? "Very hot" : hiMax >= 88 ? "Hot & clear" : "Warm";
+  const storm = items.filter(i => i.gust >= 25), dusty = items.filter(i => i.gust >= 18 && i.gust < 25);
+  const rainMax = Math.max(...items.map(i => i.prob || 0));
+  const rainy = items.filter(i => (i.prob || 0) >= 30);
+  const parts = ["<b>" + heat + "</b> — highs " + Math.round(hiMin) + "–" + Math.round(hiMax) + "°, nights down to " + Math.round(loMin) + "°"];
+  if (storm.length) parts.push("<b>dust storms " + names(storm) + "</b>");
+  else if (dusty.length) parts.push("dusty spells " + names(dusty));
+  else parts.push("calm winds");
+  if (rainMax < 15) parts.push("rain unlikely");
+  else if (rainMax < 40) {
+    const slight = items.filter(i => (i.prob || 0) >= 20);
+    parts.push("slight rain chance" + (slight.length && slight.length < 5 ? " " + names(slight) : ""));
+  } else parts.push("<b>⚠ real rain risk " + names(rainy) + " — mud watch</b>");
+  if (items.some(i => i.typical)) parts.push('<span style="color:var(--muted)">late week from 10-yr typicals</span>');
+  return '<div class="week-sum">' + parts.join(" · ") + "</div>";
+}
+
 function renderDays() {
   if (!_fc) return;
   const dl = _fc.daily;
@@ -1029,29 +1057,38 @@ function renderDays() {
   let html = "";
 
   const buildIdx = dl.time.map((t, i) => i).filter(i => eventOver || dl.time[i] < EVENT_START);
+  const buildItems = buildIdx.map(i => ({
+    dow: fmtDate(dl.time[i]).dow, hi: dl.temperature_2m_max[i], lo: dl.temperature_2m_min[i],
+    gust: dl.wind_gusts_10m_max[i], prob: dl.precipitation_probability_max[i],
+  }));
   html += '<div class="sub-label">' + (eventOver ? "Next 16 days" : "Build window · forecast") + '</div>' +
+    weekSummary(buildItems) +
     '<div class="days-grid">' + buildIdx.map(dayCard).join("") + "</div>";
 
   if (!eventOver) {
-    html += '<div class="sub-label">Burn week · Aug 30 – Sep 7 · day ☀️ / night 🌙</div><div class="days-grid">';
+    const isos = [];
     const d = new Date(EVENT_START + "T12:00:00"), end = new Date(EVENT_END + "T12:00:00");
-    for (; d <= end; d.setDate(d.getDate() + 1)) {
-      const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-      html += burnDayCard(iso);
-    }
-    html += "</div>";
+    for (; d <= end; d.setDate(d.getDate() + 1))
+      isos.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+    const burnItems = isos.map(iso => {
+      const bd = burnDayData(iso);
+      return bd && { dow: fmtDate(iso).dow, hi: bd.dayHi, lo: bd.nightLo,
+        gust: Math.max(bd.dayGust, bd.nightGust), prob: bd.rain, typical: bd.typical };
+    });
+    html += '<div class="sub-label">Burn week · Aug 30 – Sep 7 · day ☀️ / night 🌙</div>' +
+      weekSummary(burnItems) +
+      '<div class="days-grid">' + isos.map(burnDayCard).join("") + "</div>";
   }
   document.getElementById("days").innerHTML = html;
 }
 
-/* burn-week card: top-level day/night split (day 8a–8p, night 8p–8a) */
-function burnDayCard(iso) {
-  const f = fmtDate(iso), h = _fc.hourly;
+/* burn-week data: top-level day/night split (day 8a–8p, night 8p–8a) */
+function burnDayData(iso) {
+  const h = _fc.hourly;
   const pad2 = n => String(n).padStart(2, "0");
   const nd = new Date(iso + "T12:00:00"); nd.setDate(nd.getDate() + 1);
   const nextISO = nd.getFullYear() + "-" + pad2(nd.getMonth() + 1) + "-" + pad2(nd.getDate());
   const i8 = h.time.indexOf(iso + "T08:00"), i20 = h.time.indexOf(iso + "T20:00");
-  let d = null;
   if (i8 >= 0 && i20 >= 0) {
     const seg = (a, b) => ({
       g: Math.max(...h.wind_gusts_10m.slice(a, b)),
@@ -1061,11 +1098,15 @@ function burnDayCard(iso) {
     });
     const iEnd = h.time.indexOf(nextISO + "T08:00");
     const ds = seg(i8, i20), ns = seg(i20, iEnd >= 0 ? iEnd : h.time.length);
-    d = { dayHi: ds.hi, dayGust: ds.g, nightLo: ns.lo, nightGust: ns.g, rain: Math.max(ds.p, ns.p) };
-  } else {
-    const c = _climo && _climo[iso.slice(5)];
-    if (c) d = { dayHi: c.hi, dayGust: c.gust, nightLo: c.lo, nightGust: c.gust * 0.62, rain: c.rainPct, typical: true };
+    return { dayHi: ds.hi, dayGust: ds.g, nightLo: ns.lo, nightGust: ns.g, rain: Math.max(ds.p, ns.p) };
   }
+  const c = _climo && _climo[iso.slice(5)];
+  return c ? { dayHi: c.hi, dayGust: c.gust, nightLo: c.lo, nightGust: c.gust * 0.62, rain: c.rainPct, typical: true } : null;
+}
+
+function burnDayCard(iso) {
+  const f = fmtDate(iso);
+  const d = burnDayData(iso);
   const evIcon = iso === "2026-08-30" ? " · 🚪 gate" : iso === "2026-09-05" ? " · 🔥 Man" : iso === "2026-09-06" ? " · 🔥 Temple" : "";
   if (!d) return '<div class="day event climo"><div class="date">' + f.md + '<span class="dow">' + f.dow + evIcon + '</span></div><div class="met">beyond forecast range</div></div>';
   const row = (ico, t, g) => {

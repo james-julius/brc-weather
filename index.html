@@ -3,9 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playa Weather — Black Rock City dust, wind & rain forecasts</title>
+<meta name="description" content="Live weather for Burning Man: dust-storm risk, wind, rain and temperature for Black Rock City — build week and burn week, day and night. Works fully offline on the playa.">
+<link rel="canonical" href="https://brc-weather.pages.dev/">
 <meta name="theme-color" content="#534be7">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Playa Weather">
+<meta property="og:title" content="Playa Weather — live dust, wind & rain for Black Rock City">
+<meta property="og:description" content="Burn-week forecasts, dust-storm risk day & night, a living map of the city, and BMIR — works fully offline once saved to your phone.">
+<meta property="og:url" content="https://brc-weather.pages.dev/">
+<meta property="og:image" content="https://brc-weather.pages.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Playa Weather — live dust, wind and rain for Black Rock City">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Playa Weather — live dust, wind & rain for Black Rock City">
+<meta name="twitter:description" content="Burn-week forecasts, dust-storm risk day & night, a living map of the city — works fully offline on the playa.">
+<meta name="twitter:image" content="https://brc-weather.pages.dev/og.png">
+
+<!-- PWA / icons -->
 <link rel="manifest" href="manifest.webmanifest">
-<title>BRC Weather</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Playa WX">
 <style>
   @import url('https://api.fontshare.com/v2/css?f[]=bespoke-slab@500,700&display=swap');
   :root {
@@ -1350,6 +1376,12 @@ buildCity();
 applyLighting(0);
 checkBMIR();
 loadAll();
+
+/* Cloudflare Web Analytics (free, anonymous, no cookies). Installed-PWA launches
+   are tagged ?pwa=1 so the dashboard can split browser views from installed usage. */
+if (matchMedia("(display-mode: standalone)").matches && !location.search)
+  history.replaceState(null, "", location.pathname + "?pwa=1");
 </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "c75f5edf686c44bda1f2786b8e396daf"}'></script>
 </body>
 </html>

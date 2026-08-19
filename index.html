@@ -24,7 +24,12 @@
     --mud: #534be7;
     --display: "Bespoke Slab", Georgia, serif;
   }
-  * { box-sizing: border-box; margin: 0; }
+  * { box-sizing: border-box; margin: 0; scrollbar-width: thin; scrollbar-color: #cdb98e transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d3bd93; border-radius: 999px; border: 2.5px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--indigo); }
+  ::-webkit-scrollbar-corner { background: transparent; }
   body { background: var(--bg); color: var(--ink); font: 16px/1.5 Roboto, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
   .ticker {
     background: var(--sun); color: var(--ink); text-align: center;
@@ -79,6 +84,15 @@
   @media (max-width: 860px) {
     .map-cell { height: auto; }
     .map-viewport { min-height: min(88vw, 470px); }
+  }
+  @media (pointer: coarse) {
+    .timebar { padding: 12px 14px 14px; gap: 10px; }
+    .timebar input { height: 15px; }
+    .timebar input::-webkit-slider-thumb { width: 30px; height: 30px; border-width: 4px; }
+    .timebar input::-moz-range-thumb { width: 24px; height: 24px; }
+    .tb-day { padding: 7px 14px; font-size: 12.5px; }
+    .tb-row .tl { width: 96px; font-size: 12.5px; }
+    .tb-ticks { font-size: 8px; }
   }
   @media (max-height: 780px) and (min-width: 861px) {
     h1 { font-size: 34px; }
@@ -263,7 +277,12 @@
     <button onclick="loadAll()">Refresh ↻</button>
     <span class="pill" id="alertpill" hidden></span>
     <span class="pill" id="offlinepill" hidden style="background:#f3e3c3;color:#8a6a2f"></span>
-    <button id="installbtn" hidden onclick="installApp()">📱 Install offline app</button>
+    <button id="installbtn" onclick="installApp()">📱 Works offline — save to phone</button>
+  </div>
+  <div class="legend" id="install-hint" hidden style="margin:-6px 0 14px">
+    This app keeps working with zero signal — the last forecast, the map, and burn-week typicals all ride along.
+    Save it: <b>iPhone</b> — Safari Share → <i>Add to Home Screen</i>. <b>Android</b> — browser menu → <i>Install app</i>.
+    Open it once with signal and you're set for the playa.
   </div>
 
   <div class="alerts" id="alerts"></div>
@@ -362,7 +381,8 @@
     Forecast: <a href="https://open-meteo.com/">Open-Meteo</a> (blend + HRRR, GFS, ECMWF, ICON) ·
     Alerts &amp; live obs: <a href="https://api.weather.gov">NWS</a> · Air quality: Open-Meteo AQ ·
     Dust risk is a gust heuristic — whiteouts typically start above ~25 mph. Any measurable rain can close the playa to driving.
-    <br>🔥 Leave no trace — nothing stored, everything fetched fresh. Built by <a href="https://github.com/james-julius">@james-julius</a>.
+    <br>📱 Works fully offline once visited — add it to your phone's home screen before you drive past Gerlach.
+    <br>🔥 Leave no trace. Built by <a href="https://github.com/james-julius">@james-julius</a>.
   </div>
 </div>
 
@@ -840,7 +860,8 @@ function buildTimebar() {
       cur.hrs++;
     }
   }
-  ticks.innerHTML = segs.map(s => '<span style="flex:' + s.hrs + '">' + s.l + "</span>").join("");
+  const shortTicks = matchMedia("(max-width: 620px)").matches;
+  ticks.innerHTML = segs.map(s => '<span style="flex:' + s.hrs + '">' + (shortTicks ? s.l[0] : s.l) + "</span>").join("");
 }
 
 /* ---- dust particles ---- */
@@ -916,8 +937,10 @@ function renderCountdown() {
   else el.textContent = "🔥 Burning Man 2026 · Aug 30 – Sep 7 · Black Rock City, NV";
 }
 
-/* network-first with localStorage fallback, so the app still renders on-playa with no signal */
-async function getJSON(url) {
+/* network-first with localStorage fallback, so the app still renders on-playa with no signal.
+   Only a critical fallback (the main forecast) or a genuinely offline browser shows the pill —
+   a single flaky endpoint (rate-limited archive, AQ hiccup) falls back silently. */
+async function getJSON(url, critical) {
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
@@ -928,9 +951,13 @@ async function getJSON(url) {
     const c = localStorage.getItem("pw:" + url);
     if (c) {
       const o = JSON.parse(c);
-      const p = document.getElementById("offlinepill");
-      p.hidden = false;
-      p.textContent = "⚠ offline · data from " + new Date(o.t).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+      console.warn("Playa Weather: using cached copy of", url.split("?")[0], "from", new Date(o.t).toLocaleString());
+      if (critical || navigator.onLine === false) {
+        const p = document.getElementById("offlinepill");
+        p.hidden = false;
+        p.textContent = (navigator.onLine === false ? "⚠ offline · data from " : "⚠ cached forecast · ") +
+          new Date(o.t).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+      }
       return o.j;
     }
     throw e;
@@ -949,7 +976,7 @@ async function loadAll() {
   get("https://api.open-meteo.com/v1/forecast?" + QS + "&forecast_days=16" +
       "&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,precipitation" +
       "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,wind_speed_10m_max,sunrise,sunset" +
-      "&hourly=wind_gusts_10m,wind_speed_10m,wind_direction_10m,temperature_2m,relative_humidity_2m,precipitation_probability")
+      "&hourly=wind_gusts_10m,wind_speed_10m,wind_direction_10m,temperature_2m,relative_humidity_2m,precipitation_probability", true)
     .then(renderForecast)
     .catch(e => { document.getElementById("days").innerHTML = '<div class="err">Forecast failed: ' + esc(e.message) + "</div>"; });
 
@@ -1302,10 +1329,16 @@ let _installEvt = null;
 addEventListener("beforeinstallprompt", e => {
   e.preventDefault();
   _installEvt = e;
-  document.getElementById("installbtn").hidden = false;
+  document.getElementById("installbtn").textContent = "📱 Install offline app";
 });
 function installApp() {
-  if (_installEvt) { _installEvt.prompt(); _installEvt = null; document.getElementById("installbtn").hidden = true; }
+  if (_installEvt) { _installEvt.prompt(); _installEvt = null; }
+  else { const h = document.getElementById("install-hint"); h.hidden = !h.hidden; }
+}
+// already installed: swap the button for a quiet confirmation
+if (matchMedia("(display-mode: standalone)").matches) {
+  const b = document.getElementById("installbtn");
+  b.outerHTML = '<span class="pill ok">📱 saved offline</span>';
 }
 
 buildCity();

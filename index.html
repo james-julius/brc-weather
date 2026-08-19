@@ -85,6 +85,11 @@
     .map-cell { height: auto; }
     .map-viewport { min-height: min(88vw, 470px); }
   }
+  @media (max-width: 620px) {
+    .timebar .tb-row { flex-wrap: wrap; row-gap: 5px; }
+    .timebar .tb-track { order: 3; flex: 0 0 100%; }
+    .timebar .tb-row .tl { margin-left: auto; width: auto; }
+  }
   @media (pointer: coarse) {
     .timebar { padding: 12px 14px 14px; gap: 10px; }
     .timebar input { height: 15px; }
@@ -281,7 +286,7 @@
   </div>
   <div class="legend" id="install-hint" hidden style="margin:-6px 0 14px">
     This app keeps working with zero signal — the last forecast, the map, and burn-week typicals all ride along.
-    Save it: <b>iPhone</b> — Safari Share → <i>Add to Home Screen</i>. <b>Android</b> — browser menu → <i>Install app</i>.
+    Save it: <b>iPhone</b> — Safari Share → <em>Add to Home Screen</em>. <b>Android</b> — browser menu → <em>Install app</em>.
     Open it once with signal and you're set for the playa.
   </div>
 

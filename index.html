@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#534be7">
+<link rel="manifest" href="manifest.webmanifest">
+<title>BRC Weather</title>
+<style>
+  @import url('https://api.fontshare.com/v2/css?f[]=bespoke-slab@500,700&display=swap');
+  :root {
+    --bg: #faf5ec;
+    --panel: #ffffff;
+    --ink: #181614;
+    --muted: #857a66;
+    --line: #eae2d2;
+    --indigo: #534be7;
+    --peach: #ffa477;
+    --sun: #f8dc6b;
+    --low: #2f9e6e;
+    --mod: #e3a51c;
+    --high: #f4703d;
+    --extreme: #dd3227;
+    --mud: #534be7;
+    --display: "Bespoke Slab", Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.5 Roboto, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .ticker {
+    background: var(--sun); color: var(--ink); text-align: center;
+    font-size: 13px; font-weight: 600; padding: 8px 16px; letter-spacing: 0.2px;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 26px 16px 56px; }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 18px; }
+  .man { flex: none; margin-bottom: 6px; }
+  h1 { font-family: var(--display); font-weight: 700; font-size: 50px; line-height: 0.95; letter-spacing: 0.5px; }
+  h1 span { color: var(--indigo); }
+  .sub { color: var(--muted); font-size: 13px; padding-bottom: 8px; }
+  .updated { color: var(--muted); font-size: 12px; margin: 12px 0 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .updated button {
+    border: 1.5px solid var(--ink); background: var(--panel); color: var(--ink);
+    border-radius: 999px; padding: 3px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .updated button:hover { background: var(--ink); color: var(--sun); }
+  .pill { border-radius: 999px; padding: 3px 12px; font-size: 12px; font-weight: 600; }
+  .pill.ok { background: #e5f3ec; color: var(--low); }
+  .pill.bad { background: #fbe3dc; color: var(--extreme); }
+
+  .alerts:not(:empty) { margin-bottom: 12px; }
+  .alert {
+    background: #fff1e8; border: 1px solid var(--peach); border-left: 6px solid var(--extreme);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .alert strong { display: block; }
+  .alert .headline { font-size: 13px; color: #8a4530; }
+
+  /* ---- bento ---- */
+  .bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .cell { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; min-width: 0; }
+  .span2 { grid-column: span 2; } .span3 { grid-column: span 3; }
+  .span4 { grid-column: span 4; } .span6 { grid-column: span 6; }
+  .cell-label { font-family: var(--display); font-weight: 700; font-size: 19px; margin-bottom: 10px; }
+  @media (max-width: 860px) { .span2, .span3, .span4 { grid-column: span 6; } }
+
+  /* ---- map cell ---- */
+  .map-cell {
+    padding: 0; position: relative; overflow: hidden;
+    /* lighting vars (day defaults) — JS interpolates these toward night */
+    --pg1: #f2e5c6; --pg2: #e0ca99;
+    --m-chipbg: rgba(255, 255, 255, 0.88); --m-chiptext: #181614; --m-chipline: #e2d5ba; --m-chipmute: #857a66;
+    background: radial-gradient(120% 100% at 50% 32%, var(--pg1), var(--pg2));
+    border-color: #dcc99f;
+  }
+  .map-cell {
+    display: flex; flex-direction: column; align-self: start;
+    height: clamp(350px, calc(100vh - 358px), 760px);
+  }
+  .map-viewport { position: relative; flex: 1; min-height: 280px; }
+  @media (max-width: 860px) {
+    .map-cell { height: auto; }
+    .map-viewport { min-height: min(88vw, 470px); }
+  }
+  @media (max-height: 780px) and (min-width: 861px) {
+    h1 { font-size: 34px; }
+    .man { width: 28px; height: 40px; }
+    .wrap { padding-top: 16px; }
+  }
+  .map-viewport svg.map { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .map-viewport canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .burning { animation: burnpulse 0.9s ease-in-out infinite alternate; }
+  @keyframes burnpulse {
+    from { filter: drop-shadow(0 0 6px rgba(255, 120, 30, 0.85)); }
+    to   { filter: drop-shadow(0 0 20px rgba(255, 160, 40, 1)); }
+  }
+  .city-chip {
+    position: absolute; top: 12px; left: 12px; max-width: 58%;
+    background: var(--m-chipbg); border: 1px solid var(--m-chipline); border-radius: 12px;
+    padding: 8px 12px; font-size: 13px; color: var(--m-chiptext);
+    backdrop-filter: blur(3px);
+  }
+  .city-chip b { font-family: var(--display); font-size: 17px; display: block; }
+  .city-chip .sub2 { color: var(--m-chipmute); font-size: 12px; }
+  .timebar {
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--m-chipbg); border-top: 1px solid var(--m-chipline);
+    padding: 10px 16px 12px; font-size: 12px; color: var(--m-chiptext);
+  }
+  .tb-top { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+  .tb-mode {
+    display: flex; gap: 2px; margin-right: auto;
+    background: rgba(127, 118, 96, 0.14); border: 1px solid var(--m-chipline);
+    border-radius: 999px; padding: 3px;
+  }
+  .tb-mode .tb-day { border: none; font-size: 13.5px; padding: 7px 18px; }
+  .tb-days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .rail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .rail .cell { width: 100%; }
+  .rail .cell:last-child { flex: 1; }
+  #wm { font-size: 14.5px; line-height: 1.6; min-height: 212px; }
+  #nowlabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .v { white-space: nowrap; }
+  .wm-sig { margin-top: 10px; font-size: 12px; color: var(--muted); font-style: italic; }
+  .radio {
+    display: flex; align-items: center; gap: 10px; margin-top: 12px;
+    border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+    background: #fdfaf3; transition: opacity 0.3s;
+  }
+  .radio.off { opacity: 0.55; border-style: dashed; filter: grayscale(0.6); }
+  .led { width: 10px; height: 10px; border-radius: 50%; background: #b5ac9a; flex: none; }
+  .radio.live .led { background: #e04747; animation: ledpulse 1.6s infinite; }
+  @keyframes ledpulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(224, 71, 71, 0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(224, 71, 71, 0); }
+  }
+  .radio-info { display: flex; flex-direction: column; line-height: 1.3; flex: 1; min-width: 0; }
+  .radio-info b { font-size: 13.5px; }
+  .radio-info span { font-size: 11.5px; color: var(--muted); }
+  .wm-btn {
+    border: 1.5px solid var(--ink); background: var(--panel); color: var(--ink);
+    border-radius: 999px; padding: 5px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .wm-btn:hover:not(:disabled) { background: var(--ink); color: var(--sun); }
+  .wm-btn.on { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+  .wm-btn:disabled { opacity: 0.5; cursor: default; border-style: dashed; }
+  .tb-day {
+    border: 1px solid var(--m-chipline); background: transparent; color: var(--m-chiptext);
+    border-radius: 999px; padding: 2px 11px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.5px; cursor: pointer; text-transform: uppercase;
+  }
+  .tb-day.active { background: var(--indigo); color: #fff; border-color: var(--indigo); }
+  .tb-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+  .tb-row .tl { white-space: nowrap; font-weight: 600; width: 122px; text-align: right; overflow: hidden; flex: none; }
+  .tb-track { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .tb-ticks { display: flex; font-size: 9px; letter-spacing: 0.5px; color: var(--m-chipmute); text-transform: uppercase; }
+  .tb-ticks span { border-left: 1px solid var(--m-chipline); padding-left: 3px; line-height: 1.2; overflow: hidden; white-space: nowrap; }
+  .timebar input {
+    flex: 1; min-width: 0; -webkit-appearance: none; appearance: none; height: 9px;
+    border-radius: 999px; background: linear-gradient(90deg, #ffd66e, #322a5e); outline: none; cursor: pointer;
+  }
+  .timebar input::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 19px; height: 19px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--indigo); box-shadow: 0 1px 5px rgba(0,0,0,0.35);
+  }
+  .timebar input::-moz-range-thumb {
+    width: 15px; height: 15px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--indigo); box-shadow: 0 1px 5px rgba(0,0,0,0.35);
+  }
+
+  /* ---- tiles ---- */
+  #now { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { background: #fdfaf3; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+  .tile .k { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+  .tile .v { font-family: var(--display); font-size: 21px; font-weight: 700; }
+  .tile .v small { font-family: Roboto, sans-serif; font-size: 12px; font-weight: 400; color: var(--muted); }
+
+  /* ---- days ---- */
+  .days-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .sub-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--muted); font-weight: 700; margin: 14px 0 8px;
+  }
+  .sub-label:first-child { margin-top: 0; }
+  .day.climo { border-style: dashed; background: #fbf7ec; }
+  .b-climo { background: #d8cdb4; color: var(--ink); }
+  .dn { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
+  .dn b { font-family: var(--display); font-size: 19px; }
+  .dn .dn-g { font-size: 12px; font-weight: 600; }
+  .day {
+    background: #fdfaf3; border: 1px solid var(--line); border-radius: 12px; padding: 12px;
+    display: flex; flex-direction: column; gap: 5px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .day:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(24, 22, 20, 0.08); }
+  .day.event { border: 2px solid var(--indigo); }
+  .day .date { font-weight: 700; }
+  .day .date .dow { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 4px; }
+  .day .temps { font-family: var(--display); font-size: 22px; font-weight: 700; }
+  .day .temps .lo { color: var(--muted); font-size: 15px; font-weight: 500; }
+  .day .met { font-size: 12.5px; color: var(--muted); }
+  .badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; padding-top: 4px; }
+  .badge {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+    border-radius: 999px; padding: 3px 9px; color: #fff;
+  }
+  .b-low { background: var(--low); }
+  .b-mod { background: var(--mod); color: var(--ink); }
+  .b-high { background: var(--high); }
+  .b-extreme { background: var(--extreme); }
+  .b-mud { background: var(--mud); }
+  .b-event { background: var(--sun); color: var(--ink); }
+
+  .chart-scroll { overflow-x: auto; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend a { color: var(--indigo); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin: 0 4px 0 12px; vertical-align: -1px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.windy { color: var(--high); font-weight: 700; }
+  td.dim { color: var(--muted); }
+  .table-scroll { overflow-x: auto; }
+
+  .foot { margin-top: 28px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+  .foot a { color: var(--indigo); }
+  .err { color: var(--extreme); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="ticker" id="ticker">🔥 Burning Man 2026 · Aug 30 – Sep 7 · Black Rock City, NV</div>
+<div class="wrap">
+  <header>
+    <svg class="man" width="38" height="54" viewBox="0 0 24 34" fill="none" stroke="var(--indigo)" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+      <circle cx="12" cy="4" r="2.3"/>
+      <line x1="12" y1="7" x2="12" y2="16"/>
+      <line x1="12" y1="10" x2="4" y2="3.5"/>
+      <line x1="12" y1="10" x2="20" y2="3.5"/>
+      <line x1="12" y1="16" x2="6.5" y2="27"/>
+      <line x1="12" y1="16" x2="17.5" y2="27"/>
+      <path d="M2 32 L12 24.5 L22 32"/>
+    </svg>
+    <h1>Playa<br><span>Weather</span></h1>
+    <div class="sub">Black Rock City · 40.786°N 119.204°W · 3,904 ft</div>
+  </header>
+  <div class="updated">
+    <span>Updated <span id="updated">—</span></span>
+    <button onclick="loadAll()">Refresh ↻</button>
+    <span class="pill" id="alertpill" hidden></span>
+    <span class="pill" id="offlinepill" hidden style="background:#f3e3c3;color:#8a6a2f"></span>
+    <button id="installbtn" hidden onclick="installApp()">📱 Install offline app</button>
+  </div>
+
+  <div class="alerts" id="alerts"></div>
+
+  <div class="bento">
+    <div class="cell span4 map-cell" id="mapcell">
+      <div class="map-viewport">
+        <svg class="map" id="citymap" viewBox="-268 -288 536 550" preserveAspectRatio="xMidYMid meet" aria-label="Black Rock City plan with live dust conditions"></svg>
+        <canvas id="dust"></canvas>
+        <div class="city-chip">
+          <b id="city-status">Black Rock City</b>
+          <div class="sub2" id="city-wind">waiting for wind data…</div>
+        </div>
+      </div>
+      <div class="timebar">
+        <div class="tb-top">
+          <div class="tb-mode">
+            <button id="mode-now" class="tb-day active" onclick="setMode('now')">Now</button>
+            <button id="mode-build" class="tb-day" onclick="setMode('build')">Build week</button>
+            <button id="mode-burn" class="tb-day" onclick="setMode('burn')">Burn week</button>
+          </div>
+          <div class="tb-days" id="tbdays"></div>
+        </div>
+        <div class="tb-row">
+          <span id="timeglyph">☀️</span>
+          <div class="tb-track">
+            <input type="range" id="timeslider" min="0" max="71" value="0" step="1" oninput="setCityHour(+this.value)">
+            <div class="tb-ticks" id="tbticks"></div>
+          </div>
+          <span class="tl" id="timelabel">LIVE · now</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="span2 rail">
+      <div class="cell">
+        <div class="cell-label" id="nowlabel">On the playa now</div>
+        <div id="now"></div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">📻 BMIR 94.5 · Weather</div>
+        <p id="wm">Tuning in…</p>
+        <div class="wm-sig" id="wm-sig"></div>
+        <div class="radio" id="radio-widget">
+          <span class="led" id="radio-led"></span>
+          <div class="radio-info">
+            <b>BMIR 94.5 FM</b>
+            <span id="radio-status">checking signal…</span>
+          </div>
+          <button type="button" class="wm-btn" id="bmir-btn" onclick="toggleBMIR()" disabled>▶</button>
+        </div>
+        <audio id="bmir" preload="none" src="https://stream.revma.ihrhls.com/zc8378"></audio>
+      </div>
+    </div>
+
+    <div class="cell span2">
+      <div class="cell-label">💨 Wind · next 72 h</div>
+      <div class="chart-scroll" id="chart-wind"></div>
+      <div class="legend">
+        <i style="background:var(--low)"></i>calm
+        <i style="background:var(--mod)"></i>dusty
+        <i style="background:var(--high)"></i>storm
+        <i style="background:var(--extreme)"></i>whiteout
+      </div>
+    </div>
+    <div class="cell span2">
+      <div class="cell-label">🌧️ Rain · next 72 h</div>
+      <div class="chart-scroll" id="chart-rain"></div>
+      <div class="legend">Probability of rain, hourly. Any measurable rain can close the playa to driving.</div>
+    </div>
+    <div class="cell span2">
+      <div class="cell-label">🌡️ Temp · next 72 h</div>
+      <div class="chart-scroll" id="chart-temp"></div>
+      <div class="legend">Hourly temperature — playa swings ~30° between noon and 4 AM.</div>
+    </div>
+
+    <div class="cell span6">
+      <div class="cell-label">🗓️ Build &amp; burn outlook</div>
+      <div id="days"></div>
+    </div>
+
+    <div class="cell span3">
+      <div class="cell-label">📡 Live stations</div>
+      <div class="table-scroll" id="obs">Loading stations…</div>
+      <div class="legend">RAWS ridge sites ringing the Black Rock Desert, via the free NWS API. Gusts at Bluewing or Fox Mountain often reach the playa within the hour.</div>
+    </div>
+
+    <div class="cell span3">
+      <div class="cell-label">🧮 Model comparison — max gust</div>
+      <div class="table-scroll" id="models"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Forecast: <a href="https://open-meteo.com/">Open-Meteo</a> (blend + HRRR, GFS, ECMWF, ICON) ·
+    Alerts &amp; live obs: <a href="https://api.weather.gov">NWS</a> · Air quality: Open-Meteo AQ ·
+    Dust risk is a gust heuristic — whiteouts typically start above ~25 mph. Any measurable rain can close the playa to driving.
+    <br>🔥 Leave no trace — nothing stored, everything fetched fresh. Built by <a href="https://github.com/james-julius">@james-julius</a>.
+  </div>
+</div>
+
+<script>
+const LAT = 40.786, LON = -119.204;
+const EVENT_START = "2026-08-30", EVENT_END = "2026-09-07";
+// NWS gridpoint for BRC, resolved once from /points/40.786,-119.204
+const NWS_STATIONS_URL = "https://api.weather.gov/gridpoints/REV/76,159/stations";
+const QS = "latitude=" + LAT + "&longitude=" + LON +
+  "&timezone=America%2FLos_Angeles&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
+// ?demo=rain forces an 80% rain hour, to preview the wet-playa UI
+const DEMO_RAIN = new URLSearchParams(location.search).get("demo") === "rain";
+// The 4:30–10:30 street axis runs true north–south, so the 12:00 axis
+// points ~45° true: map-up = NE. Wind directions are rotated accordingly.
+const AXIS_BEARING = 45;
+
+function dustRisk(gust) {
+  if (gust >= 35) return { label: "Whiteout risk", cls: "b-extreme", color: "var(--extreme)", hex: "#dd3227" };
+  if (gust >= 25) return { label: "Dust storm", cls: "b-high", color: "var(--high)", hex: "#f4703d" };
+  if (gust >= 18) return { label: "Dusty", cls: "b-mod", color: "var(--mod)", hex: "#e3a51c" };
+  return { label: "Calm playa", cls: "b-low", color: "var(--low)", hex: "#2f9e6e" };
+}
+function mudBadge(sum, prob) {
+  if (sum >= 0.15) return { label: "Mud risk", cls: "b-mud" };
+  if (sum >= 0.05 || prob >= 40) return { label: "Rain watch", cls: "b-mud" };
+  return null;
+}
+function fmtDate(iso) {
+  const d = new Date(iso + "T12:00:00");
+  return { md: (d.getMonth() + 1) + "/" + d.getDate(), dow: d.toLocaleDateString("en-US", { weekday: "short" }) };
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const dirName = d => ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(d / 22.5) % 16];
+function milesFromBRC(lat, lon) {
+  const R = 3958.8, toR = x => x * Math.PI / 180;
+  const dLat = toR(lat - LAT), dLon = toR(lon - LON);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toR(LAT)) * Math.cos(toR(lat)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* ================= CITY MAP ================= */
+
+function buildCity() {
+  const pt = (deg, r) => { const a = deg * Math.PI / 180; return [r * Math.sin(a), -r * Math.cos(a)]; };
+  const P = (deg, r) => pt(deg, r).map(v => v.toFixed(1)).join(" ");
+  const L = (deg, r1, r2, w, col) => { const [x1, y1] = pt(deg, r1), [x2, y2] = pt(deg, r2);
+    return '<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) +
+      '" stroke="' + col + '" stroke-width="' + w + '"/>'; };
+  const lbl = (x, y, txt, size, extra) =>
+    '<text x="' + x + '" y="' + y + '" font-size="' + (size || 9) + '" fill="var(--m-label)" text-anchor="middle" ' +
+    'letter-spacing="1.6" font-weight="600" ' + (extra || "") + '>' + txt + "</text>";
+
+  let s = "";
+  // defs: ground gradient (stops recolored by lighting), grain, fence clip
+  const penta = [0, 72, 144, 216, 288].map(a => P(a, 265)).join(" L ");
+  s += '<defs>' +
+    '<radialGradient id="ground" cx="50%" cy="40%" r="72%">' +
+      '<stop id="gs1" offset="0" stop-color="#fdf7e8"/><stop id="gs2" offset="1" stop-color="#efe0bd"/></radialGradient>' +
+    '<clipPath id="fenceClip"><path d="M ' + penta + ' Z"/></clipPath>' +
+    '<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" stitchTiles="stitch"/>' +
+      '<feColorMatrix type="matrix" values="0 0 0 0 0.42 0 0 0 0 0.34 0 0 0 0 0.2 0 0 0 0.5 0"/></filter>' +
+    '</defs>';
+
+  // Playa ground inside the fence + alkali grain + risk tint layer
+  s += '<path d="M ' + penta + ' Z" fill="url(#ground)"/>';
+  s += '<rect x="-268" y="-288" width="536" height="536" filter="url(#grain)" clip-path="url(#fenceClip)" style="opacity:var(--m-grain)"/>';
+  s += '<path id="playaTint" d="M ' + penta + ' Z" fill="#f4703d" fill-opacity="0"/>';
+
+  // City fabric: solid crescent (Esplanade→K), streets carved out in ground color
+  const A = (r, from, to, sweep) => { const [x1, y1] = pt(from, r), [x2, y2] = pt(to, r);
+    return x1.toFixed(1) + " " + y1.toFixed(1) + " A " + r + " " + r + " 0 1 " + sweep + " " + x2.toFixed(1) + " " + y2.toFixed(1); };
+  s += '<path d="M ' + A(207, 60, 300, 1) + ' L ' + P(300, 100) + ' A 100 100 0 1 0 ' + P(60, 100) + ' Z" fill="var(--m-block)"/>';
+  s += '<g stroke-linecap="butt">';
+  for (let i = 0; i < 11; i++) { // A–K carved
+    const r = 115 + i * 9;
+    s += '<path d="M ' + A(r, 60, 300, 1) + '" fill="none" stroke="var(--m-carve)" stroke-width="2.4"/>';
+  }
+  for (let m = 60; m <= 300; m += 15) // radials carved
+    s += L(m, 100, 207, m % 30 === 0 ? 2.6 : 1.3, "var(--m-carve)");
+  s += "</g>";
+  // crisp crescent edges (Esplanade + K) — these carry the lamplight glow at night
+  s += '<g style="filter:drop-shadow(0 0 5px var(--m-lampglow))">' +
+    '<path d="M ' + A(100, 60, 300, 1) + '" fill="none" stroke="var(--m-edge)" stroke-width="1.4"/>' +
+    '<path d="M ' + A(207, 60, 300, 1) + '" fill="none" stroke="var(--m-edge)" stroke-width="1.1"/></g>';
+
+  // Trash fence
+  s += '<path d="M ' + penta + ' Z" fill="none" stroke="var(--m-fence)" stroke-width="1.4" stroke-dasharray="5 5"/>';
+
+  // Gate road + landmarks
+  s += L(180, 207, 236, 1.6, "var(--m-fence)").replace("/>", ' stroke-dasharray="2 3"/>');
+  const [ccx, ccy] = pt(180, 130);
+  s += '<g style="filter:drop-shadow(0 0 6px var(--m-lampglow))">' +
+    '<circle cx="' + ccx.toFixed(1) + '" cy="' + ccy.toFixed(1) + '" r="20" fill="var(--m-carve)" stroke="var(--m-camp)" stroke-width="1.6"/>' +
+    '<circle cx="' + ccx.toFixed(1) + '" cy="' + ccy.toFixed(1) + '" r="7" fill="var(--m-camp)" fill-opacity="0.5"/></g>';
+  const [tx, ty] = pt(0, 140);
+  s += '<g id="temple-g" transform="translate(' + tx + ',' + ty.toFixed(1) + ')" style="filter:drop-shadow(0 0 6px var(--m-lampglow))">' +
+    '<rect x="-6.5" y="-6.5" width="13" height="13" fill="var(--m-temple)" transform="rotate(45)"/>' +
+    '<rect x="-2.6" y="-2.6" width="5.2" height="5.2" fill="var(--m-carve)" transform="rotate(45)"/></g>';
+  // The Man: plaza + figure with ember glow at night
+  s += '<circle cx="0" cy="0" r="14" fill="var(--m-carve)" stroke="var(--m-edge)" stroke-width="0.8"/>';
+  s += '<g id="man-g" stroke="var(--m-man)" stroke-width="2.4" stroke-linecap="round" fill="none" ' +
+    'style="filter:drop-shadow(0 0 7px var(--m-manglow))" transform="translate(-9.6,-13.6) scale(0.8)">' +
+    '<circle cx="12" cy="4" r="2.3"/><line x1="12" y1="7" x2="12" y2="16"/>' +
+    '<line x1="12" y1="10" x2="4" y2="3.5"/><line x1="12" y1="10" x2="20" y2="3.5"/>' +
+    '<line x1="12" y1="16" x2="6.5" y2="27"/><line x1="12" y1="16" x2="17.5" y2="27"/></g>';
+
+  // Labels — small caps, letterspaced, clear of all linework
+  s += lbl(0, -178, "DEEP PLAYA", 9.5, 'font-style="italic"');
+  s += lbl(0, -274, "12:00", 9);
+  s += lbl(216.5, -121, "2:00", 9) + lbl(-216.5, -121, "10:00", 9);
+  s += lbl(0, 252, "6:00 · GATE", 9);
+  s += lbl(tx, ty - 16, "TEMPLE", 8);
+  s += lbl(ccx, ccy + 34, "CENTER CAMP", 8);
+  s += lbl(0, 26, "THE MAN", 7.5);
+
+  // Compass rose (true N is 45° left of map-up)
+  s += '<g transform="translate(230,-246)"><circle r="15" fill="none" stroke="var(--m-dial)" stroke-width="1"/>' +
+    '<g transform="rotate(-45)"><path d="M0 -13 L-4 2 L0 -2 L4 2 Z" fill="var(--m-dial)"/>' +
+    '<text y="-18" font-size="9" fill="var(--m-dial)" text-anchor="middle" font-weight="700">N</text></g></g>';
+
+  // Wind dial instrument
+  s += '<g transform="translate(-230,168)">' +
+    '<circle r="23" fill="var(--m-chipfill)" stroke="var(--m-dial)" stroke-width="1.2"/>' +
+    '<g stroke="var(--m-dial)" stroke-width="1" transform="rotate(-45)">' +
+      '<line y1="-23" y2="-18"/><line y1="23" y2="18"/><line x1="-23" x2="-18"/><line x1="23" x2="18"/></g>' +
+    '<g id="windRot" opacity="0.25"><line y1="14" y2="-8" stroke="var(--m-man)" stroke-width="2.2" stroke-linecap="round"/>' +
+      '<path d="M0 -17 L-5.5 -6 L5.5 -6 Z" fill="var(--m-man)"/></g>' +
+    lbl(0, 38, "WIND", 8) + '</g>';
+
+  // Scale bar + spike coords
+  s += '<g stroke="var(--m-dial)" stroke-width="1"><line x1="140" y1="238" x2="220" y2="238"/>' +
+    '<line x1="140" y1="234" x2="140" y2="242"/><line x1="220" y1="234" x2="220" y2="242"/></g>' +
+    lbl(180, 232, "2,000 FT", 7.5);
+  s += '<text x="-258" y="244" font-size="7.5" fill="var(--m-label)" letter-spacing="1.2">GOLDEN SPIKE · 40.786 N · 119.204 W</text>';
+
+  document.getElementById("citymap").innerHTML = s;
+}
+
+/* Day↔night lighting: every map color is a [day, night] pair, lerped by nightness */
+const LIGHT = {
+  "--pg1": ["#f2e5c6", "#232045"], "--pg2": ["#e0ca99", "#110e24"],
+  "--m-block": ["#e3d0a6", "#3a3470"], "--m-carve": ["#f6ecd4", "#252048"],
+  "--m-edge": ["#ab9469", "#f6b45c"], "--m-fence": ["#a3906f", "#7f74cf"],
+  "--m-label": ["#97865f", "#a79ede"], "--m-dial": ["#857a66", "#a79ede"],
+  "--m-camp": ["#c9ae4e", "#ffd668"], "--m-temple": ["#f4915e", "#ffd9a8"],
+  "--m-man": ["#534be7", "#ff9d3c"],
+  "--m-manglow": ["rgba(255,157,60,0)", "rgba(255,157,60,0.9)"],
+  "--m-lampglow": ["rgba(255,180,90,0)", "rgba(255,180,90,0.7)"],
+  "--m-chipbg": ["rgba(255,255,255,0.88)", "rgba(22,18,46,0.85)"],
+  "--m-chipfill": ["rgba(255,255,255,0.7)", "rgba(22,18,46,0.6)"],
+  "--m-chiptext": ["#181614", "#efe9ff"], "--m-chipmute": ["#857a66", "#a79ede"],
+  "--m-chipline": ["#e2d5ba", "#3b3470"], "--m-grain": ["0.1", "0.05"],
+};
+const GS = { gs1: ["#fdf7e8", "#312b5e"], gs2: ["#efe0bd", "#1d1940"] };
+let _dustCol = [166, 130, 76], _rainCol = [100, 120, 190];
+
+function parseCol(c) {
+  if (c[0] === "#") return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16), 1];
+  const m = c.match(/[\d.]+/g).map(Number); return [m[0], m[1], m[2], m[3] == null ? 1 : m[3]];
+}
+function lerpCol(a, b, t) {
+  const A = parseCol(a), B = parseCol(b);
+  const v = A.map((x, i) => x + (B[i] - x) * t);
+  return "rgba(" + Math.round(v[0]) + "," + Math.round(v[1]) + "," + Math.round(v[2]) + "," + v[3].toFixed(3) + ")";
+}
+function applyLighting(t) {
+  const el = document.getElementById("mapcell");
+  for (const k in LIGHT) {
+    const [d, n] = LIGHT[k];
+    el.style.setProperty(k, isNaN(parseFloat(d)) || d[0] === "#" || d.startsWith("rgba") ? lerpCol(d, n, t) : (parseFloat(d) + (parseFloat(n) - parseFloat(d)) * t).toFixed(3));
+  }
+  for (const id in GS) document.getElementById(id).setAttribute("stop-color", lerpCol(GS[id][0], GS[id][1], t));
+  const dc = [166 + (255 - 166) * t, 130 + (214 - 130) * t, 76 + (150 - 76) * t];
+  _dustCol = dc.map(Math.round);
+  _rainCol = [100 + 50 * t, 120 + 45 * t, 190 + 45 * t].map(Math.round);
+  document.getElementById("timeglyph").textContent = t > 0.65 ? "🌙" : t > 0.25 ? "🌅" : "☀️";
+}
+
+/* nightness from that day's real sunrise/sunset (playa-local strings, no tz math) */
+const hourOf = s => +s.slice(11, 13) + (+s.slice(14, 16)) / 60;
+function nightness(dateStr, h) {
+  if (!_fc || !_fc.daily.sunrise) return 0;
+  const di = _fc.daily.time.indexOf(dateStr);
+  // beyond the forecast horizon, fall back to typical late-Aug playa sun times
+  let sr = 6.4, ss = 19.5;
+  if (di >= 0) { sr = hourOf(_fc.daily.sunrise[di]); ss = hourOf(_fc.daily.sunset[di]); }
+  const R = 0.7;
+  if (h <= sr - R || h >= ss + R) return 1;
+  if (h < sr + R) return (sr + R - h) / (2 * R);
+  if (h > ss - R) return (h - (ss - R)) / (2 * R);
+  return 0;
+}
+
+/* Time control. Now mode: 0 = live, 1–71 = forecast hours ahead.
+   Burn-week mode: 0–191 = hours from gate Sunday 00:00 through temple-burn Sunday 23:00. */
+let _wind = null, _live = null, _hStart = 0, _chips = [], _aqH = null, _climo = null, _mode = "now";
+const BURN0 = "2026-08-30"; // gate Sunday
+// scrubbable week spans for the mode toggle
+const SPANS = {
+  build: { origin: "2026-08-23", days: 7 },
+  burn: { origin: BURN0, days: 8 },
+};
+const BURN_EVENTS = [
+  { md: "08-30", from: 0, to: 8, label: "🚪 Gate open" },
+  { md: "09-05", from: 20, to: 23, label: "🔥 The Man burns", target: "man-g" },
+  { md: "09-06", from: 19, to: 22, label: "🔥 Temple burn", target: "temple-g" },
+];
+
+function burnISO(v) {
+  const day = Math.floor(v / 24), hr = v % 24;
+  const origin = (SPANS[_mode] || SPANS.burn).origin;
+  const d = new Date(origin + "T12:00:00"); d.setDate(d.getDate() + day);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0") + "T" + String(hr).padStart(2, "0") + ":00";
+}
+
+/* typical conditions from 10-yr climatology: diurnal temp curve, afternoon-peaking wind */
+function synthFromClimo(md, hr) {
+  const c = _climo && _climo[md];
+  if (!c) return null;
+  const frac = (Math.cos((hr - 16) / 24 * 2 * Math.PI) + 1) / 2;
+  const gust = c.gust * (0.55 + 0.45 * frac);
+  return { temp: c.lo + (c.hi - c.lo) * frac, rh: Math.round(20 + 25 * (1 - frac)), spd: gust * 0.6, gust, dir: 240 };
+}
+
+function setCityHour(v) {
+  if (!_fc) return;
+  v = +v;
+  const h = _fc.hourly;
+  let src, timeStr, label, typical = false;
+  if (_mode !== "now") {
+    timeStr = burnISO(v);
+    const hr = v % 24, f = fmtDate(timeStr.slice(0, 10));
+    const i = h.time.indexOf(timeStr);
+    if (i >= 0) {
+      src = { temp: h.temperature_2m[i], rh: h.relative_humidity_2m[i], spd: h.wind_speed_10m[i],
+        gust: h.wind_gusts_10m[i], dir: h.wind_direction_10m[i] };
+    } else {
+      src = synthFromClimo(timeStr.slice(5, 10), hr) || { temp: 88, rh: 25, spd: 10, gust: 16, dir: 240 };
+      typical = true;
+    }
+    label = f.dow + " " + (hr % 12 || 12) + (hr < 12 ? " AM" : " PM") + (typical ? " · typical" : "");
+    if (_aqH && _aqH[timeStr]) { src.pm = _aqH[timeStr][0]; src.aqi = _aqH[timeStr][1]; }
+  } else if (v === 0 && _live) {
+    src = { temp: _live.temperature_2m, rh: _live.relative_humidity_2m, spd: _live.wind_speed_10m,
+      gust: _live.wind_gusts_10m, dir: _live.wind_direction_10m };
+    if (window._aq) { src.pm = _aq.pm2_5; src.aqi = _aq.us_aqi; }
+    timeStr = _live.time; label = "LIVE · now";
+  } else {
+    const i = Math.min(_hStart + v - 1, h.time.length - 1);
+    src = { temp: h.temperature_2m[i], rh: h.relative_humidity_2m[i], spd: h.wind_speed_10m[i],
+      gust: h.wind_gusts_10m[i], dir: h.wind_direction_10m[i] };
+    timeStr = h.time[i];
+    const f = fmtDate(timeStr.slice(0, 10)), hr = +timeStr.slice(11, 13);
+    label = f.dow + " " + (hr % 12 || 12) + (hr < 12 ? " AM" : " PM");
+    if (_aqH && _aqH[timeStr]) { src.pm = _aqH[timeStr][0]; src.aqi = _aqH[timeStr][1]; }
+  }
+
+  const risk = dustRisk(src.gust);
+  const date = timeStr.slice(0, 10), hr2 = +timeStr.slice(11, 13);
+  src.date = date;
+  // rain probability for this hour (typical burn-week hours use 10-yr rain odds)
+  if (src.prob == null) {
+    if (_mode !== "now") {
+      const bi = h.time.indexOf(timeStr);
+      src.prob = bi >= 0 ? h.precipitation_probability[bi] : (_climo && _climo[date.slice(5)] ? _climo[date.slice(5)].rainPct : null);
+    } else {
+      const fi = v === 0 ? _hStart : Math.min(_hStart + v - 1, h.time.length - 1);
+      src.prob = h.precipitation_probability[fi];
+    }
+  }
+  if (DEMO_RAIN) src.prob = Math.max(src.prob || 0, 80);
+  _wind = { spd: src.spd, gust: src.gust, dir: src.dir, prob: src.prob };
+  let ev = null;
+  if (_mode === "burn") ev = BURN_EVENTS.find(e => e.md === date.slice(5) && hr2 >= e.from && hr2 <= e.to) || null;
+  document.querySelectorAll(".burning").forEach(el => el.classList.remove("burning"));
+  if (ev && ev.target) document.getElementById(ev.target).classList.add("burning");
+
+  document.getElementById("city-status").textContent = ev ? ev.label : risk.label;
+  document.getElementById("city-wind").textContent =
+    Math.round(src.temp) + "° · wind from the " + dirName(src.dir) + " at " + Math.round(src.spd) + ", gusting " + Math.round(src.gust) +
+    (src.prob != null ? " · rain " + Math.round(src.prob) + "%" : "");
+  document.getElementById("timelabel").textContent = label;
+  document.getElementById("nowlabel").textContent = (_mode === "now" && v === 0) ? "On the playa now" : "Playa · " + label;
+  _chips.forEach(c => c.el.classList.toggle("active", c.v === 0 && _mode === "now" ? v === 0 : c.date === date));
+  const tint = document.getElementById("playaTint");
+  tint.setAttribute("fill", risk.hex);
+  tint.setAttribute("fill-opacity", src.gust >= 18 ? "0.1" : "0");
+  const rot = document.getElementById("windRot");
+  rot.setAttribute("opacity", "1");
+  rot.setAttribute("transform", "rotate(" + ((src.dir + 180 - AXIS_BEARING) % 360).toFixed(0) + ")");
+  const nt = nightness(date, hourOf(timeStr));
+  applyLighting(nt);
+  renderNowTiles(src);
+  weathermanSay({ src, ev, typical, hr: hr2, night: nt, live: _mode === "now" && v === 0 });
+  startDust();
+}
+
+/* ---- BMIR weatherman: stylized radio narration of the scrubbed hour ---- */
+function weathermanSay(o) {
+  const s0 = o.src, g = Math.round(s0.gust), w = Math.round(s0.spd), t = Math.round(s0.temp);
+  let seed = (o.hr * 37 + g * 13 + t * 7 + (o.src.date || "").charCodeAt(9)) >>> 0;
+  const pick = a => { seed = (seed * 1103515245 + 12345) >>> 0; return a[(seed >>> 16) % a.length]; };
+  const parts = [];
+
+  parts.push(o.night > 0.65
+    ? pick(["It's deep night out on the playa, friends —", "Night owls of Black Rock City, this one's for you —", "The stars are out over the trash fence, people —"])
+    : o.hr < 11 ? pick(["Goooood morning, Black Rock City!", "Rise and shine, dusty ones —", "Morning, campers, coffee's on at center camp —"])
+    : o.hr < 17 ? pick(["Good afternoon, Black Rock City!", "Top of the afternoon, burners —", "Hello playa, from high atop media mecca —"])
+    : pick(["Good evening, Black Rock City!", "Sun's sliding down behind the mountains, folks —", "Golden hour on the golden spike, everybody —"]));
+
+  if (o.ev) parts.push(o.ev.label.includes("Man") ? "and tonight… tonight the MAN BURNS. Eighty thousand souls in one big circle — see you out there."
+    : o.ev.label.includes("Temple") ? "the Temple burns tonight. Quiet hearts, soft voices. Hold your people close."
+    : "and the GATES ARE OPEN — welcome home, you beautiful weirdos.");
+
+  if (o.typical) parts.push("Now, we're reading from the almanac here — a typical " + fmtDate(s0.date).dow + " on the playa looks like this:");
+
+  parts.push(t >= 95 ? pick([t + " degrees of brain-melt — find shade or become jerky.", "an absolute scorcher at " + t + " — misting tents earn their keep today."])
+    : t >= 85 ? pick(["a toasty " + t + " degrees out there.", t + " and cooking gently — classic playa."])
+    : t >= 60 ? pick(["a lovely " + t + " degrees.", t + " easy degrees — chef's kiss weather."])
+    : pick(["a crisp " + t + " — faux fur is functional tonight.", t + " degrees, so layer up before the art car ride."]));
+
+  parts.push(g >= 35 ? pick(["And folks — WHITEOUT RISK. Gusts to " + g + " out of the " + dirName(s0.dir) + ". Get to camp, seal the goggles, hug whoever's next to you.", "This is the big one: " + g + " mile-an-hour gusts. If you can see your neighbor's art car, you're doing great."])
+    : g >= 25 ? pick(["Hold onto your yurts — gusts to " + g + " from the " + dirName(s0.dir) + ". Shade structures are auditioning for flight school.", "Real dust storm energy: " + g + " mile-an-hour gusts. Double-stake the rebar, lights on, speed down."])
+    : g >= 18 ? pick(["A frisky " + w + " mile-an-hour breeze gusting " + g + " — goggles within arm's reach.", "Some grit on the move, gusts to " + g + " — expect dust devils and dirty teeth."])
+    : pick(["Barely a whisper of wind — the playa is glass.", "Dead calm on the flats. Perfect hour for a deep-playa bike ride.", "Still air, mirror playa — the dust is taking the hour off."]));
+
+  if (s0.prob != null && s0.prob >= 40) parts.push("And heads up: " + Math.round(s0.prob) + " percent chance of rain. Wet playa means NOBODY drives — remember the mud year.");
+  else if (s0.prob != null && s0.prob >= 15) parts.push("Small chance of sprinkles — " + Math.round(s0.prob) + " percent. Keep one eye on the sky.");
+  else if (s0.rh != null && s0.rh < 15) parts.push("Humidity's " + Math.round(s0.rh) + " percent, which is to say: none. Drink water. Then drink more water.");
+
+  document.getElementById("wm").textContent = parts.join(" ");
+  document.getElementById("wm-sig").textContent = pick([
+    "— You're listening to BMIR 94.5. Stay hydrated, stay dusty.",
+    "— This has been your playa weather minute. Dust in your ears, love in your heart. BMIR.",
+    "— BMIR 94.5, the voice of the playa. Drink water. Do art.",
+  ]);
+}
+
+function radioState(cls, status, btnTxt, disabled) {
+  const wg = document.getElementById("radio-widget"), btn = document.getElementById("bmir-btn");
+  wg.classList.remove("off", "live");
+  if (cls) wg.classList.add(cls);
+  document.getElementById("radio-status").textContent = status;
+  btn.textContent = btnTxt;
+  btn.disabled = disabled;
+  btn.classList.toggle("on", btnTxt === "⏸");
+}
+
+function toggleBMIR() {
+  const a = document.getElementById("bmir");
+  if (a.paused) {
+    radioState("live", "tuning…", "⏳", true);
+    a.play().then(() => radioState("live", "ON AIR · streaming live from the playa", "⏸", false))
+      .catch(() => checkBMIR());
+  } else {
+    a.pause();
+    radioState("live", "ON AIR · tap to listen", "▶", false);
+  }
+}
+
+/* probe the stream: the widget is only enabled while BMIR is actually broadcasting.
+   BMIR is seasonal (build week → the burn), so when off-air we re-check every 30 min. */
+function checkBMIR() {
+  const a = document.getElementById("bmir");
+  radioState(null, "checking signal…", "▶", true);
+  let settled = false;
+  const offAir = () => { if (settled) return; settled = true;
+    radioState("off", "OFF AIR · returns for build week — auto-rechecking", "▶", true); };
+  const onAir = () => { if (settled) return; settled = true;
+    radioState("live", "ON AIR · tap to listen", "▶", false); };
+  a.addEventListener("error", offAir, { once: true });
+  a.addEventListener("canplay", onAir, { once: true });
+  setTimeout(offAir, 10000);
+  a.preload = "metadata";
+  a.load();
+}
+setInterval(() => {
+  const a = document.getElementById("bmir");
+  if (a.paused && document.getElementById("radio-widget").classList.contains("off")) checkBMIR();
+}, 30 * 60 * 1000);
+
+function setMode(m) {
+  _mode = m;
+  ["now", "build", "burn"].forEach(k =>
+    document.getElementById("mode-" + k).classList.toggle("active", m === k));
+  buildTimebar();
+  const sl = document.getElementById("timeslider");
+  const v = m === "now" ? 0 : 13; // week modes open on day-one afternoon
+  sl.value = v;
+  setCityHour(v);
+}
+
+/* Day-jump chips + a track painted with the real day/night cycle */
+function buildTimebar() {
+  const sl = document.getElementById("timeslider");
+  const span = SPANS[_mode];
+  const maxV = span ? span.days * 24 - 1 : 71;
+  sl.max = maxV;
+  const stops = [], step = span ? 6 : 3;
+  for (let v = 0; v <= maxV; v += step) {
+    const ts = span ? burnISO(v)
+      : (v === 0 ? _live.time : _fc.hourly.time[Math.min(_hStart + v - 1, _fc.hourly.time.length - 1)]);
+    const t = nightness(ts.slice(0, 10), hourOf(ts));
+    stops.push(lerpCol("#ffd66e", "#2b2455", t) + " " + (v / maxV * 100).toFixed(1) + "%");
+  }
+  sl.style.background = "linear-gradient(90deg," + stops.join(",") + ")";
+  const wrap = document.getElementById("tbdays");
+  wrap.innerHTML = ""; _chips = [];
+  const mk = (txt, v, date) => {
+    const b = document.createElement("button");
+    b.className = "tb-day"; b.textContent = txt;
+    b.onclick = () => { sl.value = v; setCityHour(v); };
+    wrap.appendChild(b); _chips.push({ v, date, el: b });
+  };
+  if (_mode === "now") {
+    mk("Now", 0, null);
+    for (let v = 1; v <= 71; v++) {
+      const ts = _fc.hourly.time[_hStart + v - 1];
+      if (ts && ts.endsWith("T13:00")) mk(fmtDate(ts.slice(0, 10)).dow, v, ts.slice(0, 10));
+    }
+  } else if (_mode === "burn") {
+    const names = ["Gate", "Mon", "Tue", "Wed", "Thu", "Fri", "🔥 Man", "🔥 Temple"];
+    for (let d = 0; d < 8; d++) {
+      const jumpHr = d === 6 ? 21 : d === 7 ? 20 : 13;
+      const v = d * 24 + jumpHr;
+      mk(names[d], v, burnISO(v).slice(0, 10));
+    }
+  } else {
+    for (let d = 0; d < span.days; d++) {
+      const v = d * 24 + 13;
+      mk(fmtDate(burnISO(v).slice(0, 10)).dow, v, burnISO(v).slice(0, 10));
+    }
+  }
+  // day ticks under the track, aligned to the timeline
+  const ticks = document.getElementById("tbticks");
+  const segs = [];
+  if (span) {
+    for (let d = 0; d < span.days; d++)
+      segs.push({ l: fmtDate(burnISO(d * 24).slice(0, 10)).dow.toUpperCase(), hrs: 24 });
+  } else {
+    let cur = null;
+    for (let v = 0; v <= 71; v++) {
+      const ts = v === 0 ? _live.time : _fc.hourly.time[Math.min(_hStart + v - 1, _fc.hourly.time.length - 1)];
+      const d2 = ts.slice(0, 10);
+      if (!cur || cur.d !== d2) { cur = { l: fmtDate(d2).dow.toUpperCase(), d: d2, hrs: 0 }; segs.push(cur); }
+      cur.hrs++;
+    }
+  }
+  ticks.innerHTML = segs.map(s => '<span style="flex:' + s.hrs + '">' + s.l + "</span>").join("");
+}
+
+/* ---- dust particles ---- */
+let _dustRAF = 0, _parts = [], _rains = [];
+function spawnDust(w, h, edge, hd) {
+  const p = { x: Math.random() * w, y: Math.random() * h, k: 0.5 + Math.random(),
+    a: 0.12 + Math.random() * 0.35, s: 0.8 + Math.random() * 1.7, ph: Math.random() * 6.28 };
+  if (edge && hd != null) { // re-enter from the upwind edge
+    const ux = -Math.sin(hd), uy = Math.cos(hd);
+    if (Math.abs(ux) > Math.abs(uy)) p.x = ux > 0 ? w + 15 : -15; else p.y = uy > 0 ? h + 15 : -15;
+  }
+  return p;
+}
+function startDust() {
+  if (_dustRAF) return;
+  const cv = document.getElementById("dust"), ctx = cv.getContext("2d");
+  const resize = () => { const r = cv.parentElement.getBoundingClientRect();
+    cv.width = r.width * devicePixelRatio; cv.height = r.height * devicePixelRatio; };
+  resize();
+  addEventListener("resize", resize);
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const w = cv.width, h = cv.height;
+    ctx.clearRect(0, 0, w, h);
+    if (_wind) {
+      const target = Math.min(420, Math.round(14 + _wind.gust * 9));
+      while (_parts.length < target) _parts.push(spawnDust(w, h));
+      if (_parts.length > target) _parts.length = target;
+      const hd = (_wind.dir + 180 - AXIS_BEARING) * Math.PI / 180;
+      const base = (_wind.spd * 2.4 + 7) * (w / 580);
+      ctx.lineCap = "round";
+      const col = _dustCol.join(",");
+      for (const p of _parts) {
+        const v = base * p.k;
+        const vx = Math.sin(hd) * v + Math.sin(now / 700 + p.ph) * v * 0.16;
+        const vy = -Math.cos(hd) * v + Math.cos(now / 900 + p.ph) * v * 0.12;
+        p.x += vx * dt; p.y += vy * dt;
+        if (p.x < -20 || p.x > w + 20 || p.y < -20 || p.y > h + 20) Object.assign(p, spawnDust(w, h, true, hd));
+        ctx.strokeStyle = "rgba(" + col + "," + p.a.toFixed(2) + ")";
+        ctx.lineWidth = p.s * devicePixelRatio;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - vx * 0.25, p.y - vy * 0.25); ctx.stroke();
+      }
+      // rain: falling streaks, density scales with probability, drifting with the wind
+      const rainTarget = _wind.prob >= 15 ? Math.round((_wind.prob / 100) * 240) : 0;
+      while (_rains.length < rainTarget) _rains.push({ x: Math.random() * w, y: Math.random() * h, k: 0.7 + Math.random() * 0.6, len: (8 + Math.random() * 10) * devicePixelRatio });
+      if (_rains.length > rainTarget) _rains.length = rainTarget;
+      if (_rains.length) {
+        const rvx = Math.sin(hd) * base * 0.3, rcol = _rainCol.join(",");
+        ctx.lineWidth = 1 * devicePixelRatio;
+        for (const r of _rains) {
+          const fall = h * 1.5 * r.k;
+          r.y += fall * dt; r.x += rvx * dt;
+          if (r.y > h + 20) { r.y = -20; r.x = Math.random() * w; }
+          if (r.x > w + 10) r.x = -10; else if (r.x < -10) r.x = w + 10;
+          ctx.strokeStyle = "rgba(" + rcol + ",0.45)";
+          ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x - rvx * 0.03, r.y - r.len); ctx.stroke();
+        }
+      }
+    }
+    _dustRAF = requestAnimationFrame(frame);
+  }
+  _dustRAF = requestAnimationFrame(frame);
+}
+
+/* ================= DATA + SECTIONS ================= */
+
+function renderCountdown() {
+  const days = Math.ceil((new Date(EVENT_START) - new Date()) / 864e5);
+  const el = document.getElementById("ticker");
+  if (days > 0) el.textContent = "🔥 Gate opens in " + days + " days · Burning Man 2026 · Aug 30 – Sep 7 · Black Rock City, NV";
+  else if (new Date() <= new Date(EVENT_END + "T23:59:59")) el.textContent = "🔥 The Man burns soon — Burning Man 2026 is ON · welcome home";
+  else el.textContent = "🔥 Burning Man 2026 · Aug 30 – Sep 7 · Black Rock City, NV";
+}
+
+/* network-first with localStorage fallback, so the app still renders on-playa with no signal */
+async function getJSON(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    try { localStorage.setItem("pw:" + url, JSON.stringify({ t: Date.now(), j })); } catch (e) {}
+    return j;
+  } catch (e) {
+    const c = localStorage.getItem("pw:" + url);
+    if (c) {
+      const o = JSON.parse(c);
+      const p = document.getElementById("offlinepill");
+      p.hidden = false;
+      p.textContent = "⚠ offline · data from " + new Date(o.t).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+      return o.j;
+    }
+    throw e;
+  }
+}
+
+let _lastSync = 0;
+async function loadAll() {
+  _lastSync = Date.now();
+  renderCountdown();
+  document.getElementById("updated").textContent = new Date().toLocaleString();
+  document.getElementById("offlinepill").hidden = true;
+  const get = getJSON;
+
+  // Each section renders independently so one failed API doesn't blank the page.
+  get("https://api.open-meteo.com/v1/forecast?" + QS + "&forecast_days=16" +
+      "&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,precipitation" +
+      "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,wind_speed_10m_max,sunrise,sunset" +
+      "&hourly=wind_gusts_10m,wind_speed_10m,wind_direction_10m,temperature_2m,relative_humidity_2m,precipitation_probability")
+    .then(renderForecast)
+    .catch(e => { document.getElementById("days").innerHTML = '<div class="err">Forecast failed: ' + esc(e.message) + "</div>"; });
+
+  // 10-year climatology for burn-week days beyond the forecast horizon
+  get("https://archive-api.open-meteo.com/v1/archive?" + QS +
+      "&start_date=2016-08-20&end_date=2025-09-10&daily=temperature_2m_max,temperature_2m_min,wind_gusts_10m_max,precipitation_sum")
+    .then(d => {
+      const byDay = {};
+      d.daily.time.forEach((t, i) => {
+        if (d.daily.temperature_2m_max[i] == null) return;
+        (byDay[t.slice(5)] = byDay[t.slice(5)] || []).push(
+          [d.daily.temperature_2m_max[i], d.daily.temperature_2m_min[i], d.daily.wind_gusts_10m_max[i], d.daily.precipitation_sum[i]]);
+      });
+      _climo = {};
+      for (const k in byDay) {
+        const rows = byDay[k], avg = j => rows.reduce((s, r) => s + r[j], 0) / rows.length;
+        _climo[k] = { hi: avg(0), lo: avg(1), gust: avg(2), rainPct: Math.round(100 * rows.filter(r => r[3] >= 0.05).length / rows.length) };
+      }
+      renderDays();
+    })
+    .catch(() => {});
+
+  get("https://api.open-meteo.com/v1/forecast?" + QS + "&forecast_days=10" +
+      "&daily=wind_gusts_10m_max,precipitation_sum&models=gfs_hrrr,gfs_seamless,ecmwf_ifs025,icon_seamless")
+    .then(renderModels)
+    .catch(e => { document.getElementById("models").innerHTML = '<div class="err">Model comparison failed: ' + esc(e.message) + "</div>"; });
+
+  get("https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + LAT + "&longitude=" + LON +
+      "&current=pm2_5,us_aqi&hourly=pm2_5,us_aqi&forecast_days=4&timezone=America%2FLos_Angeles")
+    .then(d => {
+      window._aq = d.current;
+      _aqH = {};
+      d.hourly.time.forEach((t, i) => { _aqH[t] = [d.hourly.pm2_5[i], d.hourly.us_aqi[i]]; });
+      if (_fc) setCityHour(+document.getElementById("timeslider").value);
+    })
+    .catch(() => {});
+
+  get("https://api.weather.gov/alerts/active?point=" + LAT + "," + LON)
+    .then(renderAlerts)
+    .catch(e => { const p = document.getElementById("alertpill"); p.hidden = false; p.className = "pill"; p.textContent = "NWS alerts unavailable"; });
+
+  loadObs().catch(e => { document.getElementById("obs").innerHTML = '<div class="err">Live observations unavailable (' + esc(e.message) + ")</div>"; });
+}
+
+async function loadObs() {
+  const meta = await fetch(NWS_STATIONS_URL).then(r => r.json());
+  const stations = meta.features.map(f => ({
+    id: f.properties.stationIdentifier,
+    name: f.properties.name.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
+    mi: milesFromBRC(f.geometry.coordinates[1], f.geometry.coordinates[0])
+  })).sort((a, b) => a.mi - b.mi).slice(0, 6);
+
+  const results = await Promise.allSettled(stations.map(s =>
+    fetch("https://api.weather.gov/stations/" + s.id + "/observations/latest").then(r => {
+      if (!r.ok) throw new Error(r.status); return r.json();
+    })));
+
+  const c2f = v => v == null ? null : v * 9 / 5 + 32;
+  const k2m = v => v == null ? null : v * 0.621371;
+  const cell = (v, unit, windy) => v == null ? '<td class="dim">—</td>' :
+    '<td class="' + (windy && v >= 25 ? "windy" : "") + '">' + Math.round(v) + (unit || "") + "</td>";
+
+  const rows = stations.map((s, i) => {
+    if (results[i].status !== "fulfilled") return "";
+    const p = results[i].value.properties;
+    const age = Math.round((Date.now() - new Date(p.timestamp)) / 60000);
+    return "<tr><td>" + esc(s.name) + "</td>" +
+      "<td>" + s.mi.toFixed(0) + " mi</td>" +
+      cell(c2f(p.temperature && p.temperature.value), "°") +
+      cell(k2m(p.windSpeed && p.windSpeed.value)) +
+      cell(k2m(p.windGust && p.windGust.value), "", true) +
+      '<td class="dim">' + (age < 60 ? age + "m" : Math.round(age / 60) + "h") + "</td></tr>";
+  }).join("");
+
+  document.getElementById("obs").innerHTML = rows
+    ? "<table><tr><th>Station</th><th>Dist</th><th>Temp</th><th>Wind</th><th>Gust</th><th>Age</th></tr>" + rows + "</table>"
+    : '<div class="err">No recent observations returned.</div>';
+}
+
+let _fc = null;
+function renderForecast(d) {
+  _fc = d;
+  _live = d.current;
+  const nowIso = d.current.time.slice(0, 13);
+  _hStart = Math.max(0, d.hourly.time.findIndex(t => t.slice(0, 13) >= nowIso));
+  renderDays();
+  renderCharts(d.hourly);
+  renderModels(null); // re-render Blend column now that _fc exists
+  setMode(_mode);
+}
+
+function dayCard(i) {
+  const dl = _fc.daily, t = dl.time[i];
+  const gust = dl.wind_gusts_10m_max[i], sum = dl.precipitation_sum[i], prob = dl.precipitation_probability_max[i];
+  const risk = dustRisk(gust), mud = mudBadge(sum, prob), f = fmtDate(t);
+  const inEvent = t >= EVENT_START && t <= EVENT_END;
+  return '<div class="day' + (inEvent ? " event" : "") + '">' +
+    '<div class="date">' + f.md + '<span class="dow">' + f.dow + "</span></div>" +
+    '<div class="temps">' + Math.round(dl.temperature_2m_max[i]) + '° <span class="lo">/ ' + Math.round(dl.temperature_2m_min[i]) + "°</span></div>" +
+    '<div class="met">Gusts ' + Math.round(gust) + " mph · wind " + Math.round(dl.wind_speed_10m_max[i]) + "</div>" +
+    '<div class="met">Rain ' + prob + "%" + (sum >= 0.01 ? " · " + sum.toFixed(2) + '"' : "") + "</div>" +
+    '<div class="badges"><span class="badge ' + risk.cls + '">' + risk.label + "</span>" +
+    (mud ? '<span class="badge ' + mud.cls + '">' + mud.label + "</span>" : "") +
+    "</div></div>";
+}
+
+function renderDays() {
+  if (!_fc) return;
+  const dl = _fc.daily;
+  const eventOver = new Date() > new Date(EVENT_END + "T23:59:59");
+  let html = "";
+
+  const buildIdx = dl.time.map((t, i) => i).filter(i => eventOver || dl.time[i] < EVENT_START);
+  html += '<div class="sub-label">' + (eventOver ? "Next 16 days" : "Build window · forecast") + '</div>' +
+    '<div class="days-grid">' + buildIdx.map(dayCard).join("") + "</div>";
+
+  if (!eventOver) {
+    html += '<div class="sub-label">Burn week · Aug 30 – Sep 7 · day ☀️ / night 🌙</div><div class="days-grid">';
+    const d = new Date(EVENT_START + "T12:00:00"), end = new Date(EVENT_END + "T12:00:00");
+    for (; d <= end; d.setDate(d.getDate() + 1)) {
+      const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      html += burnDayCard(iso);
+    }
+    html += "</div>";
+  }
+  document.getElementById("days").innerHTML = html;
+}
+
+/* burn-week card: top-level day/night split (day 8a–8p, night 8p–8a) */
+function burnDayCard(iso) {
+  const f = fmtDate(iso), h = _fc.hourly;
+  const pad2 = n => String(n).padStart(2, "0");
+  const nd = new Date(iso + "T12:00:00"); nd.setDate(nd.getDate() + 1);
+  const nextISO = nd.getFullYear() + "-" + pad2(nd.getMonth() + 1) + "-" + pad2(nd.getDate());
+  const i8 = h.time.indexOf(iso + "T08:00"), i20 = h.time.indexOf(iso + "T20:00");
+  let d = null;
+  if (i8 >= 0 && i20 >= 0) {
+    const seg = (a, b) => ({
+      g: Math.max(...h.wind_gusts_10m.slice(a, b)),
+      hi: Math.max(...h.temperature_2m.slice(a, b)),
+      lo: Math.min(...h.temperature_2m.slice(a, b)),
+      p: Math.max(...h.precipitation_probability.slice(a, b)),
+    });
+    const iEnd = h.time.indexOf(nextISO + "T08:00");
+    const ds = seg(i8, i20), ns = seg(i20, iEnd >= 0 ? iEnd : h.time.length);
+    d = { dayHi: ds.hi, dayGust: ds.g, nightLo: ns.lo, nightGust: ns.g, rain: Math.max(ds.p, ns.p) };
+  } else {
+    const c = _climo && _climo[iso.slice(5)];
+    if (c) d = { dayHi: c.hi, dayGust: c.gust, nightLo: c.lo, nightGust: c.gust * 0.62, rain: c.rainPct, typical: true };
+  }
+  const evIcon = iso === "2026-08-30" ? " · 🚪 gate" : iso === "2026-09-05" ? " · 🔥 Man" : iso === "2026-09-06" ? " · 🔥 Temple" : "";
+  if (!d) return '<div class="day event climo"><div class="date">' + f.md + '<span class="dow">' + f.dow + evIcon + '</span></div><div class="met">beyond forecast range</div></div>';
+  const row = (ico, t, g) => {
+    const r = dustRisk(g);
+    return '<div class="dn">' + ico + ' <b>' + Math.round(t) + '°</b><span class="dn-g" style="color:' + r.color + '">' +
+      Math.round(g) + " mph · " + r.label.toLowerCase().replace(" playa", "") + "</span></div>";
+  };
+  return '<div class="day event' + (d.typical ? " climo" : "") + '">' +
+    '<div class="date">' + f.md + '<span class="dow">' + f.dow + evIcon + "</span></div>" +
+    row("☀️", d.dayHi, d.dayGust) +
+    row("🌙", d.nightLo, d.nightGust) +
+    '<div class="met">Rain ' + Math.round(d.rain) + "%" + (d.typical ? " odds" : "") + "</div>" +
+    '<div class="badges">' +
+    (d.typical ? '<span class="badge b-climo">Typical · 10 yr</span>' : "") +
+    (d.rain >= 40 ? '<span class="badge b-mud">Rain watch</span>' : "") +
+    "</div></div>";
+}
+
+function renderNowTiles(src) {
+  if (!src) return;
+  const risk = dustRisk(src.gust);
+  const di = src.date ? _fc.daily.time.indexOf(src.date) : -1;
+  const clock = s => { const hh = +s.slice(11, 13); return (hh % 12 || 12) + ":" + s.slice(14, 16) + (hh < 12 ? "a" : "p"); };
+  const sun = di >= 0 && _fc.daily.sunrise ? clock(_fc.daily.sunrise[di]) + " <small>· " + clock(_fc.daily.sunset[di]) + "</small>"
+    : "≈6:25a <small>· 7:30p</small>";
+  document.getElementById("now").innerHTML =
+    tile("🌡️ Temp", Math.round(src.temp) + "°F") +
+    tile("💧 Humidity", (src.rh == null ? "—" : Math.round(src.rh)) + "<small>%</small>") +
+    tile("💨 Wind", Math.round(src.spd) + " <small>mph</small>") +
+    tile("🌬️ Gusts", Math.round(src.gust) + " <small>mph</small>") +
+    (src.prob == null ? tile("🌧️ Rain", "—")
+      : '<div class="tile"><div class="k">🌧️ Rain</div><div class="v"' + (src.prob >= 40 ? ' style="color:var(--indigo)"' : "") + '>' + Math.round(src.prob) + "<small>%</small></div></div>") +
+    tile("🌫️ PM2.5 / AQI", src.pm == null ? "—" : Math.round(src.pm) + " <small>/ " + Math.round(src.aqi) + "</small>") +
+    tile("☀️ Sun ↑↓", sun) +
+    '<div class="tile"><div class="k">🏜️ Playa status</div><div class="v" style="font-size:17px;color:' + risk.color + '">' + risk.label + "</div></div>";
+  function tile(k, v){ return '<div class="tile"><div class="k">' + k + '</div><div class="v">' + v + "</div></div>"; }
+}
+
+function renderCharts(h) {
+  const start = _hStart;
+  const N = Math.min(72, h.time.length - start);
+  const W = Math.max(520, N * 8), H = 150, pad = 24, bw = (W - pad - 4) / N;
+  const plot = H - pad - 10;
+
+  const dayLabels = () => {
+    let s = "";
+    for (let i = 0; i < N; i++) {
+      const t = h.time[start + i];
+      if (t.endsWith("T00:00")) {
+        const f = fmtDate(t.slice(0, 10));
+        s += '<text x="' + (pad + i * bw + 2).toFixed(1) + '" y="' + (H - 6) + '" font-size="10" fill="#181614" font-weight="600">' + f.dow + " " + f.md + "</text>";
+      }
+    }
+    return s;
+  };
+  const gridAt = (vals, max, min, unit) => vals.map(v => {
+    const y = H - pad - ((v - (min || 0)) / (max - (min || 0))) * plot;
+    return '<line x1="' + pad + '" y1="' + y.toFixed(1) + '" x2="' + W + '" y2="' + y.toFixed(1) + '" stroke="#e7dfcd" stroke-dasharray="3 3"/>' +
+      '<text x="0" y="' + (y + 4).toFixed(1) + '" font-size="9" fill="#857a66">' + v + (unit || "") + "</text>";
+  }).join("");
+  const svg = (el, inner, label) => { document.getElementById(el).innerHTML =
+    '<svg width="' + W + '" height="' + H + '" role="img" aria-label="' + label + '">' + inner + dayLabels() + "</svg>"; };
+
+  // wind: dual bars (speed solid, gust ghost), colored by dust risk
+  const wMax = Math.max(40, ...h.wind_gusts_10m.slice(start, start + N)) * 1.1;
+  let wind = gridAt([18, 25, 35], wMax);
+  for (let i = 0; i < N; i++) {
+    const g = h.wind_gusts_10m[start + i], w2 = h.wind_speed_10m[start + i], x = pad + i * bw;
+    const gh = (g / wMax) * plot, wh = (w2 / wMax) * plot, c = dustRisk(g).color;
+    wind += '<rect x="' + x.toFixed(1) + '" y="' + (H - pad - gh).toFixed(1) + '" width="' + (bw - 1.5).toFixed(1) + '" height="' + gh.toFixed(1) + '" fill="' + c + '" opacity="0.35"><title>' + h.time[start + i].replace("T", " ") + ": gust " + Math.round(g) + " / wind " + Math.round(w2) + " mph</title></rect>" +
+      '<rect x="' + x.toFixed(1) + '" y="' + (H - pad - wh).toFixed(1) + '" width="' + (bw - 1.5).toFixed(1) + '" height="' + wh.toFixed(1) + '" fill="' + c + '"/>';
+  }
+  svg("chart-wind", wind, "Hourly wind and gusts");
+
+  // rain: probability bars
+  let rain = gridAt([25, 50, 75], 100, 0, "%");
+  for (let i = 0; i < N; i++) {
+    const p = h.precipitation_probability[start + i], x = pad + i * bw;
+    const ph = (p / 100) * plot;
+    rain += '<rect x="' + x.toFixed(1) + '" y="' + (H - pad - ph).toFixed(1) + '" width="' + (bw - 1.5).toFixed(1) + '" height="' + Math.max(ph, 1).toFixed(1) + '" fill="var(--indigo)" opacity="' + (p > 0 ? "0.75" : "0.12") + '"><title>' + h.time[start + i].replace("T", " ") + ": " + p + "%</title></rect>";
+  }
+  svg("chart-rain", rain, "Hourly rain probability");
+
+  // temp: warm area line
+  const temps = h.temperature_2m.slice(start, start + N);
+  const tMin = Math.floor((Math.min(...temps) - 5) / 10) * 10, tMax = Math.ceil((Math.max(...temps) + 5) / 10) * 10;
+  const gv = []; for (let g = tMin + 10; g < tMax; g += 20) gv.push(g);
+  let temp = gridAt(gv, tMax, tMin, "°");
+  let line = "", area = "";
+  for (let i = 0; i < N; i++) {
+    const x = (pad + i * bw + bw / 2).toFixed(1);
+    const y = (H - pad - ((temps[i] - tMin) / (tMax - tMin)) * plot).toFixed(1);
+    line += (i ? " L " : "M ") + x + " " + y;
+    area += (i ? " L " : "M " + x + " " + (H - pad) + " L ") + x + " " + y;
+  }
+  area += " L " + (pad + (N - 1) * bw + bw / 2).toFixed(1) + " " + (H - pad) + " Z";
+  temp += '<path d="' + area + '" fill="rgba(224,118,47,0.12)"/><path d="' + line + '" fill="none" stroke="#e0762f" stroke-width="2.2"/>';
+  svg("chart-temp", temp, "Hourly temperature");
+}
+
+let _md = null;
+function renderModels(d) {
+  if (d) _md = d;
+  if (!_md) return;
+  const dl = _md.daily;
+  const models = [["Blend*", null], ["HRRR", "gfs_hrrr"], ["GFS", "gfs_seamless"], ["ECMWF", "ecmwf_ifs025"], ["ICON", "icon_seamless"]];
+  let head = "<tr><th>Day</th>" + models.map(m => "<th>" + m[0] + "</th>").join("") + "<th>Rain</th></tr>";
+  const rows = dl.time.map((t, i) => {
+    const f = fmtDate(t);
+    let cells = "", precipMax = 0;
+    models.forEach(([name, key]) => {
+      let v;
+      if (!key) v = _fc ? _fc.daily.wind_gusts_10m_max[i] : null;
+      else {
+        v = (dl["wind_gusts_10m_max_" + key] || [])[i];
+        const p = (dl["precipitation_sum_" + key] || [])[i];
+        if (p != null && p > precipMax) precipMax = p;
+      }
+      cells += v == null ? '<td class="dim">—</td>' : '<td class="' + (v >= 25 ? "windy" : "") + '">' + Math.round(v) + "</td>";
+    });
+    return "<tr><td>" + f.dow + " " + f.md + "</td>" + cells + "<td>" + (precipMax >= 0.01 ? precipMax.toFixed(2) + '"' : '<span class="dim">—</span>') + "</td></tr>";
+  }).join("");
+  document.getElementById("models").innerHTML = "<table>" + head + rows + "</table>" +
+    '<div class="legend">*Blend = best-match. HRRR = 3 km rapid-refresh (48 h horizon). Orange = 25+ mph gusts. Rain = highest across models.</div>';
+}
+
+function renderAlerts(d) {
+  const pill = document.getElementById("alertpill");
+  pill.hidden = false;
+  if (!d.features || !d.features.length) {
+    pill.className = "pill ok"; pill.textContent = "✓ No NWS warnings";
+    document.getElementById("alerts").innerHTML = "";
+    return;
+  }
+  pill.className = "pill bad"; pill.textContent = "⚠ " + d.features.length + " active NWS alert" + (d.features.length > 1 ? "s" : "");
+  document.getElementById("alerts").innerHTML = d.features.map(f => {
+    const p = f.properties;
+    return '<div class="alert"><strong>' + esc(p.event) + "</strong><div class=\"headline\">" +
+      esc(p.headline || "") + "</div></div>";
+  }).join("");
+}
+
+/* Opportunistic re-sync: refresh whenever signal returns, on foreground with stale
+   data, and every 30 min while open — so the forecast stays current through burn week. */
+addEventListener("online", () => loadAll());
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && Date.now() - _lastSync > 15 * 60e3) loadAll();
+});
+setInterval(() => { if (navigator.onLine !== false && Date.now() - _lastSync > 29 * 60e3) loadAll(); }, 5 * 60e3);
+
+/* PWA: service worker (https only — file:// falls back to the localStorage layer) + install prompt */
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0)
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    // Android Chrome: refresh the cached forecast in the background even when closed
+    if ("periodicSync" in reg) reg.periodicSync.register("refresh-weather", { minInterval: 6 * 3600e3 }).catch(() => {});
+  }).catch(() => {});
+let _installEvt = null;
+addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  _installEvt = e;
+  document.getElementById("installbtn").hidden = false;
+});
+function installApp() {
+  if (_installEvt) { _installEvt.prompt(); _installEvt = null; document.getElementById("installbtn").hidden = true; }
+}
+
+buildCity();
+applyLighting(0);
+checkBMIR();
+loadAll();
+</script>
+</body>
+</html>

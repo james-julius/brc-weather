@@ -1,0 +1,12 @@
+{
+  "name": "Playa Weather — Black Rock City",
+  "short_name": "Playa WX",
+  "description": "Live weather, dust forecasts, and burn-week outlook for Black Rock City.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#faf5ec",
+  "theme_color": "#534be7",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -165,3 +165,7 @@
 {"ts":"2026-08-19T19:32:20.024Z","cmd":"goto","args":"https://brc-weather.pages.dev/","origin":"https://brc-weather.pages.dev/","durationMs":469,"status":"ok","hasCookies":false,"mode":"launched"}
 {"ts":"2026-08-19T19:32:21.564Z","cmd":"wait","args":"--networkidle","origin":"https://brc-weather.pages.dev/","durationMs":1499,"status":"ok","hasCookies":false,"mode":"launched"}
 {"ts":"2026-08-19T19:32:23.612Z","cmd":"network","args":"","origin":"https://brc-weather.pages.dev/","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:37:16.364Z","cmd":"goto","args":"http://localhost:8642/","origin":"http://localhost:8642/","durationMs":232,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:37:18.316Z","cmd":"wait","args":"--networkidle","origin":"http://localhost:8642/","durationMs":1885,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:37:20.879Z","cmd":"console","args":"--errors","origin":"http://localhost:8642/","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}
+{"ts":"2026-08-19T19:37:20.930Z","cmd":"js","args":"[...document.querySelectorAll(\".sub-label\")].map(e=>e.textContent).join(\" | \") + \" ||| \" + [...document.querySelectorAll(\".week-sum\")].map(e=>e.textContent).join(\" || \")","origin":"http://localhost:8642/","durationMs":1,"status":"ok","hasCookies":false,"mode":"launched"}

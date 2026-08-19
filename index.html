@@ -805,11 +805,11 @@ function weekItems(mode) {
     const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     if (mode === "burn") {
       const bd = burnDayData(iso);
-      if (bd) out.push({ dow: fmtDate(iso).dow, hi: bd.dayHi, lo: bd.nightLo,
+      if (bd) out.push({ dow: fmtDate(iso).dow, md: fmtDate(iso).md, hi: bd.dayHi, lo: bd.nightLo,
         gust: Math.max(bd.dayGust, bd.nightGust), prob: bd.rain, typical: bd.typical });
     } else {
       const i = dl.time.indexOf(iso);
-      if (i >= 0) out.push({ dow: fmtDate(iso).dow, hi: dl.temperature_2m_max[i], lo: dl.temperature_2m_min[i],
+      if (i >= 0) out.push({ dow: fmtDate(iso).dow, md: fmtDate(iso).md, hi: dl.temperature_2m_max[i], lo: dl.temperature_2m_min[i],
         gust: dl.wind_gusts_10m_max[i], prob: dl.precipitation_probability_max[i] });
     }
   }
@@ -1124,7 +1124,7 @@ function weekSummary(items) {
 function summaryHTML(items) {
   items = items.filter(Boolean);
   if (!items.length) return "";
-  const names = a => a.length >= 5 ? "most days" : a.map(i => i.dow).join(" & ");
+  const names = a => a.length >= 5 ? "most days" : a.map(i => i.dow + (i.md ? " " + i.md : "")).join(" & ");
   const hiMin = Math.min(...items.map(i => i.hi)), hiMax = Math.max(...items.map(i => i.hi));
   const loMin = Math.min(...items.map(i => i.lo));
   const heat = hiMax >= 97 ? "Very hot" : hiMax >= 88 ? "Hot & clear" : "Warm";
@@ -1150,14 +1150,27 @@ function renderDays() {
   const eventOver = new Date() > new Date(EVENT_END + "T23:59:59");
   let html = "";
 
-  const buildIdx = dl.time.map((t, i) => i).filter(i => eventOver || dl.time[i] < EVENT_START);
-  const buildItems = buildIdx.map(i => ({
-    dow: fmtDate(dl.time[i]).dow, hi: dl.temperature_2m_max[i], lo: dl.temperature_2m_min[i],
+  const item = i => ({
+    dow: fmtDate(dl.time[i]).dow, md: fmtDate(dl.time[i]).md,
+    hi: dl.temperature_2m_max[i], lo: dl.temperature_2m_min[i],
     gust: dl.wind_gusts_10m_max[i], prob: dl.precipitation_probability_max[i],
-  }));
-  html += '<div class="sub-label">' + (eventOver ? "Next 16 days" : "Build window · forecast") + '</div>' +
-    weekSummary(buildItems) +
-    '<div class="days-grid">' + buildIdx.map(dayCard).join("") + "</div>";
+  });
+  if (eventOver) {
+    const idx = dl.time.map((t, i) => i);
+    html += '<div class="sub-label">Next 16 days</div>' + weekSummary(idx.map(item)) +
+      '<div class="days-grid">' + idx.map(dayCard).join("") + "</div>";
+  } else {
+    const buildStart = SPANS.build.origin;
+    const preIdx = dl.time.map((t, i) => i).filter(i => dl.time[i] < buildStart);
+    const buildIdx = dl.time.map((t, i) => i).filter(i => dl.time[i] >= buildStart && dl.time[i] < EVENT_START);
+    if (preIdx.length)
+      html += '<div class="sub-label">Leading up · forecast</div>' +
+        '<div class="days-grid">' + preIdx.map(dayCard).join("") + "</div>";
+    if (buildIdx.length)
+      html += '<div class="sub-label">Build week · Aug 23 – 29</div>' +
+        weekSummary(buildIdx.map(item)) +
+        '<div class="days-grid">' + buildIdx.map(dayCard).join("") + "</div>";
+  }
 
   if (!eventOver) {
     const isos = [];
@@ -1166,7 +1179,7 @@ function renderDays() {
       isos.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
     const burnItems = isos.map(iso => {
       const bd = burnDayData(iso);
-      return bd && { dow: fmtDate(iso).dow, hi: bd.dayHi, lo: bd.nightLo,
+      return bd && { dow: fmtDate(iso).dow, md: fmtDate(iso).md, hi: bd.dayHi, lo: bd.nightLo,
         gust: Math.max(bd.dayGust, bd.nightGust), prob: bd.rain, typical: bd.typical };
     });
     html += '<div class="sub-label">Burn week · Aug 30 – Sep 7 · day ☀️ / night 🌙</div>' +

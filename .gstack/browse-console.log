@@ -1,1 +1,3 @@
-[2026-08-19T19:32:20.333Z] [error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[2026-08-19T19:37:16.612Z] [error] Failed to load resource: the server responded with a status of 503 (Service Unavailable)
+[2026-08-19T19:37:16.688Z] [error] Access to XMLHttpRequest at 'https://cloudflareinsights.com/cdn-cgi/rum' from origin 'http://localhost:8642' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: The 'Access-Control-Allow-Origin' header has a value 'http://localhost' that is not equal to the supplied origin.
+[2026-08-19T19:37:16.688Z] [error] Failed to load resource: net::ERR_FAILED

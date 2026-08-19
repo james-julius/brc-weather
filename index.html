@@ -695,7 +695,7 @@ function setCityHour(v) {
   document.getElementById("city-status").textContent = ev ? ev.label : risk.label;
   document.getElementById("city-wind").textContent =
     Math.round(src.temp) + "° · wind from the " + dirName(src.dir) + " at " + Math.round(src.spd) + ", gusting " + Math.round(src.gust) +
-    (src.prob != null ? " · rain " + Math.round(src.prob) + "%" : "");
+    (src.prob >= 10 ? " · rain " + Math.round(src.prob) + "%" : "");
   document.getElementById("timelabel").textContent = label;
   document.getElementById("nowlabel").textContent = (_mode === "now" && v === 0) ? "On the playa now" : "Playa · " + label;
   _chips.forEach(c => c.el.classList.toggle("active", c.v === 0 && _mode === "now" ? v === 0 : c.date === date));
@@ -1109,7 +1109,7 @@ function dayCard(i) {
     '<div class="date">' + f.md + '<span class="dow">' + f.dow + "</span></div>" +
     '<div class="temps">' + Math.round(dl.temperature_2m_max[i]) + '° <span class="lo">/ ' + Math.round(dl.temperature_2m_min[i]) + "°</span></div>" +
     '<div class="met">Gusts ' + Math.round(gust) + " mph · wind " + Math.round(dl.wind_speed_10m_max[i]) + "</div>" +
-    '<div class="met">Rain ' + prob + "%" + (sum >= 0.01 ? " · " + sum.toFixed(2) + '"' : "") + "</div>" +
+    '<div class="met">' + (prob >= 10 ? "Rain " + prob + "%" + (sum >= 0.01 ? " · " + sum.toFixed(2) + '"' : "") : "Rain unlikely") + "</div>" +
     '<div class="badges"><span class="badge ' + risk.cls + '">' + risk.label + "</span>" +
     (mud ? '<span class="badge ' + mud.cls + '">' + mud.label + "</span>" : "") +
     "</div></div>";
@@ -1211,7 +1211,8 @@ function burnDayCard(iso) {
     '<div class="date">' + f.md + '<span class="dow">' + f.dow + evIcon + "</span></div>" +
     row("☀️", d.dayHi, d.dayGust) +
     row("🌙", d.nightLo, d.nightGust) +
-    '<div class="met">Rain ' + Math.round(d.rain) + "%" + (d.typical ? " odds" : "") + "</div>" +
+    '<div class="met">' + (d.typical ? "Rain odds " + Math.round(d.rain) + "% (10 yr)"
+      : d.rain >= 10 ? "Rain " + Math.round(d.rain) + "%" : "Rain unlikely") + "</div>" +
     '<div class="badges">' +
     (d.typical ? '<span class="badge b-climo">Typical · 10 yr</span>' : "") +
     (d.rain >= 40 ? '<span class="badge b-mud">Rain watch</span>' : "") +
@@ -1231,6 +1232,7 @@ function renderNowTiles(src) {
     tile("💨 Wind", Math.round(src.spd) + " <small>mph</small>") +
     tile("🌬️ Gusts", Math.round(src.gust) + " <small>mph</small>") +
     (src.prob == null ? tile("🌧️ Rain", "—")
+      : src.prob < 10 ? '<div class="tile"><div class="k">🌧️ Rain</div><div class="v" style="color:var(--muted)">&lt;10<small>%</small></div></div>'
       : '<div class="tile"><div class="k">🌧️ Rain</div><div class="v"' + (src.prob >= 40 ? ' style="color:var(--indigo)"' : "") + '>' + Math.round(src.prob) + "<small>%</small></div></div>") +
     tile("🌫️ PM2.5 / AQI", src.pm == null ? "—" : Math.round(src.pm) + " <small>/ " + Math.round(src.aqi) + "</small>") +
     tile("☀️ Sun ↑↓", sun) +

@@ -116,6 +116,7 @@
   }
   .tb-mode .tb-day { border: none; font-size: 13.5px; padding: 7px 18px; }
   .tb-days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tb-sum { font-size: 12px; color: var(--m-chiptext); opacity: 0.92; }
   .rail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .rail .cell { width: 100%; }
   .rail .cell:last-child { flex: 1; }
@@ -286,6 +287,7 @@
           </div>
           <div class="tb-days" id="tbdays"></div>
         </div>
+        <div class="tb-sum" id="tb-sum" hidden></div>
         <div class="tb-row">
           <span id="timeglyph">☀️</span>
           <div class="tb-track">
@@ -743,11 +745,39 @@ setInterval(() => {
   if (a.paused && document.getElementById("radio-widget").classList.contains("off")) checkBMIR();
 }, 30 * 60 * 1000);
 
+/* items for a SPANS week (used by the timebar summary) */
+function weekItems(mode) {
+  const span = SPANS[mode], dl = _fc.daily, out = [];
+  const d = new Date(span.origin + "T12:00:00");
+  for (let k = 0; k < span.days; k++, d.setDate(d.getDate() + 1)) {
+    const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    if (mode === "burn") {
+      const bd = burnDayData(iso);
+      if (bd) out.push({ dow: fmtDate(iso).dow, hi: bd.dayHi, lo: bd.nightLo,
+        gust: Math.max(bd.dayGust, bd.nightGust), prob: bd.rain, typical: bd.typical });
+    } else {
+      const i = dl.time.indexOf(iso);
+      if (i >= 0) out.push({ dow: fmtDate(iso).dow, hi: dl.temperature_2m_max[i], lo: dl.temperature_2m_min[i],
+        gust: dl.wind_gusts_10m_max[i], prob: dl.precipitation_probability_max[i] });
+    }
+  }
+  return out;
+}
+
+function updateTbSum() {
+  const el = document.getElementById("tb-sum");
+  if (_mode === "now" || !_fc) { el.hidden = true; return; }
+  const inner = summaryHTML(weekItems(_mode));
+  el.hidden = !inner;
+  el.innerHTML = inner;
+}
+
 function setMode(m) {
   _mode = m;
   ["now", "build", "burn"].forEach(k =>
     document.getElementById("mode-" + k).classList.toggle("active", m === k));
   buildTimebar();
+  updateTbSum();
   const sl = document.getElementById("timeslider");
   const v = m === "now" ? 0 : 13; // week modes open on day-one afternoon
   sl.value = v;
@@ -939,6 +969,7 @@ async function loadAll() {
         _climo[k] = { hi: avg(0), lo: avg(1), gust: avg(2), rainPct: Math.round(100 * rows.filter(r => r[3] >= 0.05).length / rows.length) };
       }
       renderDays();
+      updateTbSum();
     })
     .catch(() => {});
 
@@ -1028,6 +1059,10 @@ function dayCard(i) {
 
 /* one-line plain-English verdict for a group of days */
 function weekSummary(items) {
+  const inner = summaryHTML(items);
+  return inner ? '<div class="week-sum">' + inner + "</div>" : "";
+}
+function summaryHTML(items) {
   items = items.filter(Boolean);
   if (!items.length) return "";
   const names = a => a.length >= 5 ? "most days" : a.map(i => i.dow).join(" & ");
@@ -1046,8 +1081,8 @@ function weekSummary(items) {
     const slight = items.filter(i => (i.prob || 0) >= 20);
     parts.push("slight rain chance" + (slight.length && slight.length < 5 ? " " + names(slight) : ""));
   } else parts.push("<b>⚠ real rain risk " + names(rainy) + " — mud watch</b>");
-  if (items.some(i => i.typical)) parts.push('<span style="color:var(--muted)">late week from 10-yr typicals</span>');
-  return '<div class="week-sum">' + parts.join(" · ") + "</div>";
+  if (items.some(i => i.typical)) parts.push('<span style="opacity:0.65">late week from 10-yr typicals</span>');
+  return parts.join(" · ");
 }
 
 function renderDays() {

@@ -241,6 +241,7 @@
   }
   .day.climo { border-style: dashed; background: #fbf7ec; }
   .b-climo { background: #d8cdb4; color: var(--ink); }
+  .b-far { background: #ece3cd; color: var(--muted); }
   .dn { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
   .dn b { font-family: var(--display); font-size: 19px; }
   .dn .dn-g { font-size: 12px; font-weight: 600; }
@@ -1112,6 +1113,11 @@ function pruneModes() {
   if ((buildOver && _mode === "build") || (burnOver && _mode === "burn")) _mode = "now";
 }
 
+/* GFS-only territory beyond ECMWF's ~10-day horizon — mark it */
+function isLongRange(iso) {
+  return _live && (new Date(iso + "T12:00:00") - new Date(_live.time.slice(0, 10) + "T12:00:00")) / 864e5 >= 10;
+}
+
 function dayCard(i) {
   const dl = _fc.daily, t = dl.time[i];
   const gust = dl.wind_gusts_10m_max[i], sum = dl.precipitation_sum[i], prob = dl.precipitation_probability_max[i];
@@ -1124,6 +1130,7 @@ function dayCard(i) {
     '<div class="met">' + (prob >= 10 ? "Rain " + prob + "%" + (sum >= 0.01 ? " · " + sum.toFixed(2) + '"' : "") : "Rain unlikely") + "</div>" +
     '<div class="badges"><span class="badge ' + risk.cls + '">' + risk.label + "</span>" +
     (mud ? '<span class="badge ' + mud.cls + '">' + mud.label + "</span>" : "") +
+    (isLongRange(t) ? '<span class="badge b-far" title="Beyond the 10-day skilled-forecast horizon — GFS only, expect this to shift">Long range</span>' : "") +
     "</div></div>";
 }
 
@@ -1239,7 +1246,8 @@ function burnDayCard(iso) {
     '<div class="met">' + (d.typical ? "Rain odds " + Math.round(d.rain) + "% (10 yr)"
       : d.rain >= 10 ? "Rain " + Math.round(d.rain) + "%" : "Rain unlikely") + "</div>" +
     '<div class="badges">' +
-    (d.typical ? '<span class="badge b-climo">Typical · 10 yr</span>' : "") +
+    (d.typical ? '<span class="badge b-climo">Typical · 10 yr</span>'
+      : isLongRange(iso) ? '<span class="badge b-far" title="Beyond the 10-day skilled-forecast horizon — GFS only, expect this to shift">Long range</span>' : "") +
     (d.rain >= 40 ? '<span class="badge b-mud">Rain watch</span>' : "") +
     "</div></div>";
 }

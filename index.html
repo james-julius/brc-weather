@@ -1098,7 +1098,18 @@ function renderForecast(d) {
   renderDays();
   renderCharts(d.hourly);
   renderModels(null); // re-render Blend column now that _fc exists
+  pruneModes();
   setMode(_mode);
+}
+
+/* retire week modes once their week has passed (playa-local date) */
+function pruneModes() {
+  const today = _live.time.slice(0, 10);
+  const buildOver = today > "2026-08-29", burnOver = today > EVENT_END;
+  document.getElementById("mode-build").hidden = buildOver;
+  document.getElementById("mode-burn").hidden = burnOver;
+  document.querySelector(".tb-mode").style.display = buildOver && burnOver ? "none" : "";
+  if ((buildOver && _mode === "build") || (burnOver && _mode === "burn")) _mode = "now";
 }
 
 function dayCard(i) {

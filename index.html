@@ -78,6 +78,10 @@
   .pill.bad { background: #fbe3dc; color: var(--extreme); }
 
   .alerts:not(:empty) { margin-bottom: 12px; }
+  .next4 {
+    background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--low);
+    border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px;
+  }
   .alert {
     background: #fff1e8; border: 1px solid var(--peach); border-left: 6px solid var(--extreme);
     border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
@@ -310,6 +314,7 @@
     <span class="pill" id="alertpill" hidden></span>
     <span class="pill" id="offlinepill" hidden style="background:#f3e3c3;color:#8a6a2f"></span>
     <button id="installbtn" onclick="installApp()">📱 Works offline — save to phone</button>
+    <button id="sharebtn" onclick="shareApp()">🔗 Share</button>
   </div>
   <div class="legend" id="install-hint" hidden style="margin:-6px 0 14px">
     This app keeps working with zero signal — the last forecast, the map, and burn-week typicals all ride along.
@@ -318,6 +323,8 @@
   </div>
 
   <div class="alerts" id="alerts"></div>
+
+  <div class="next4" id="next4" hidden></div>
 
   <div class="bento">
     <div class="cell span4 map-cell" id="mapcell">
@@ -537,11 +544,13 @@ function buildCity() {
     '<g transform="rotate(-45)"><path d="M0 -13 L-4 2 L0 -2 L4 2 Z" fill="var(--m-dial)"/>' +
     '<text y="-18" font-size="9" fill="var(--m-dial)" text-anchor="middle" font-weight="700">N</text></g></g>';
 
-  // Wind dial instrument
+  // Wind dial instrument (cardinal letters true-north aligned)
   s += '<g transform="translate(-230,168)">' +
     '<circle r="23" fill="var(--m-chipfill)" stroke="var(--m-dial)" stroke-width="1.2"/>' +
     '<g stroke="var(--m-dial)" stroke-width="1" transform="rotate(-45)">' +
-      '<line y1="-23" y2="-18"/><line y1="23" y2="18"/><line x1="-23" x2="-18"/><line x1="23" x2="18"/></g>' +
+      '<line y1="-23" y2="-18"/><line y1="23" y2="18"/><line x1="-23" x2="-18"/><line x1="23" x2="18"/>' +
+      '<g stroke="none" fill="var(--m-dial)" font-size="6" font-weight="700" text-anchor="middle">' +
+        '<text y="-11">N</text><text x="13.5" y="2.2">E</text><text y="15.5">S</text><text x="-13.5" y="2.2">W</text></g></g>' +
     '<g id="windRot" opacity="0.25"><line y1="14" y2="-8" stroke="var(--m-man)" stroke-width="2.2" stroke-linecap="round"/>' +
       '<path d="M0 -17 L-5.5 -6 L5.5 -6 Z" fill="var(--m-man)"/></g>' +
     lbl(0, 38, "WIND", 8) + '</g>';
@@ -1089,6 +1098,16 @@ async function loadObs() {
   document.getElementById("obs").innerHTML = rows
     ? "<table><tr><th>Station</th><th>Dist</th><th>Temp</th><th>Wind</th><th>Gust</th><th>Age</th></tr>" + rows + "</table>"
     : '<div class="err">No recent observations returned.</div>';
+
+  // strongest ridge gust feeds the next-4-hours early warning
+  let up = null;
+  stations.forEach((s, i) => {
+    if (results[i].status !== "fulfilled") return;
+    const g = k2m(results[i].value.properties.windGust && results[i].value.properties.windGust.value);
+    if (g != null && (!up || g > up.gust)) up = { name: s.name, mi: Math.round(s.mi), gust: g };
+  });
+  window._upwind = up;
+  renderNext4();
 }
 
 let _fc = null;
@@ -1100,8 +1119,52 @@ function renderForecast(d) {
   renderDays();
   renderCharts(d.hourly);
   renderModels(null); // re-render Blend column now that _fc exists
+  renderNext4();
   pruneModes();
   setMode(_mode);
+}
+
+/* "Am I about to get hit?" — one-line nowcast for the next 4 hours,
+   with an early warning when an upwind ridge station is already getting slammed */
+function renderNext4() {
+  if (!_fc || !_live) return;
+  const el = document.getElementById("next4"), h = _fc.hourly;
+  const idx = [];
+  for (let k = 0; k < 4; k++) idx.push(Math.min(_hStart + k, h.time.length - 1));
+  const gusts = idx.map(i => h.wind_gusts_10m[i]);
+  const gNow = _live.wind_gusts_10m;
+  const gMax = Math.max(...gusts, gNow);
+  const peakI = idx[gusts.indexOf(Math.max(...gusts))];
+  const hr = +h.time[peakI].slice(11, 13);
+  const hl = (hr % 12 || 12) + (hr < 12 ? " AM" : " PM");
+  const rain4 = Math.max(...idx.map(i => h.precipitation_probability[i]));
+  const t0 = Math.round(gNow), t4 = Math.round(gMax);
+  let risk = dustRisk(gMax), msg;
+  if (gMax >= 25) msg = t0 >= 25 ? "<b>Dust storm conditions</b> — gusts to " + t4 + " mph continuing"
+    : "Gusts climbing " + t0 + "→" + t4 + " mph by " + hl + " — <b>dust storm likely</b>";
+  else if (gMax >= 18) msg = t4 > t0 + 3 ? "Gusts building " + t0 + "→" + t4 + " mph by " + hl + " — dusty spell ahead"
+    : "Dusty — gusts around " + t4 + " mph";
+  else msg = "Calm — gusts topping out near " + t4 + " mph";
+  msg += rain4 >= 30 ? " · <b>rain risk " + rain4 + "% — watch the sky</b>" : rain4 >= 10 ? " · rain " + rain4 + "%" : " · no rain";
+  if (window._upwind && _upwind.gust >= 25 && gNow < 20) {
+    msg = "<b>⚠ " + esc(_upwind.name) + " (" + _upwind.mi + " mi out) gusting " + Math.round(_upwind.gust) +
+      " mph — ridge winds often reach the city within the hour.</b> " + msg;
+    risk = dustRisk(_upwind.gust);
+  }
+  el.hidden = false;
+  el.style.borderLeftColor = risk.hex;
+  el.innerHTML = "<b>Next 4 hours:</b> " + msg;
+}
+
+function shareApp() {
+  const data = { title: "Playa Weather", url: "https://brc-weather.pages.dev/",
+    text: "Live dust, wind & rain for Black Rock City — works offline on the playa." };
+  if (navigator.share) navigator.share(data).catch(() => {});
+  else navigator.clipboard.writeText(data.url).then(() => {
+    const b = document.getElementById("sharebtn");
+    b.textContent = "✓ Link copied";
+    setTimeout(() => { b.textContent = "🔗 Share"; }, 1600);
+  });
 }
 
 /* retire week modes once their week has passed (playa-local date) */
